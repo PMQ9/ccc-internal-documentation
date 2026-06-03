@@ -5,14 +5,16 @@ distills Vanderbilt's institutional brand (color, logos, imagery) and the CCC ma
 specific, contrast-checked decisions used to theme this BookStack instance.
 
 This is the *spec*. The applied artifact is [`deploy/branding/`](../../deploy/branding/) — the custom
-stylesheet, placeholder assets, and the apply/validation runbook. When the two disagree, this file is
+stylesheet, logo/favicon assets, and the apply/validation runbook. When the two disagree, this file is
 the source of truth for *intent*; the CSS is the source of truth for *what ships*.
 
-> **Trademark note (read first).** Vanderbilt marks and logos are "for authorized use only." This repo
-> ships **no official Vanderbilt logo, Star V, seal, or school lockup** — only a neutral text
-> placeholder. The official CCC lockup must be obtained from Vanderbilt Brand Communications as part of
-> VUIT coordination before any externally visible launch. See
-> [§4 Logos & lockups](#4-logos--lockups) and the [VUIT checklist](../runbooks/vuit-coordination-checklist.md).
+> **Brand-asset note (read first).** This repo ships the **official CCC lockup**, assembled from
+> Vanderbilt's own vector art taken verbatim from the live college site
+> ([computing.vanderbilt.edu](https://computing.vanderbilt.edu/)): the dimensional-metallic V and the
+> "VANDERBILT" logotype, with the college name set in a serif. That is appropriate **internal** use of
+> CCC's own mark. Use the marks as-is (don't recolor or redraw the V). For print, large-format, or
+> externally distributed use, get the master art file from Vanderbilt Brand Communications (a VUIT item).
+> See [§4 Logos & lockups](#4-logos--lockups) and the [VUIT checklist](../runbooks/vuit-coordination-checklist.md).
 
 ---
 
@@ -110,11 +112,14 @@ for CCC — released in phases by Brand Communications).
 - **Formats:** PNG (RGB, screen) and EPS (CMYK, print). Metallic ink (PMS 871) / foil files for
   high-end print come from Brand Communications.
 
-**Authorization & what this repo ships:** marks are for authorized use only. This repo deliberately
-ships **only a non-trademarked text placeholder**
-([`deploy/branding/assets/ccc-logo-placeholder.svg`](../../deploy/branding/assets/ccc-logo-placeholder.svg)).
-Do **not** recreate, trace, or approximate the Star V, seal, or any official lockup. Obtaining the
-official CCC school lockup (with clear-space-correct PNG/SVG at ≥250 px) is a VUIT-coordination item.
+**What this repo ships:** the CCC lockup in two variants, built from the genuine Vanderbilt vectors on
+the live site — [`ccc-logo-reversed.svg`](../../deploy/branding/assets/ccc-logo-reversed.svg) (white
+text, for the dark header) and [`ccc-logo.svg`](../../deploy/branding/assets/ccc-logo.svg) (black text,
+for light backgrounds), plus [`ccc-favicon.svg`](../../deploy/branding/assets/ccc-favicon.svg) (the V
+alone). The V and the "VANDERBILT" logotype are official vectors copied verbatim; the college name is
+set in a serif (the licensed brand face isn't embedded, so it renders in the system serif). Use the
+marks as-is — don't recolor or redraw the V. A master/print art file should come from Brand
+Communications.
 
 ---
 

@@ -7,9 +7,16 @@ actually ships.
 ```
 deploy/branding/
   ccc-custom-head.html              # paste into Settings → Customization → Custom HTML Head Content
-  assets/ccc-logo-placeholder.svg   # non-trademarked placeholder; replace with the authorized lockup
+  assets/ccc-logo-reversed.svg      # CCC lockup, white text — for the dark header (upload this one)
+  assets/ccc-logo.svg               # CCC lockup, black text — for light backgrounds / print
+  assets/ccc-favicon.svg            # the gold V alone — favicon / app icon
   README.md                         # this file
 ```
+
+The logos are the **real CCC marks**, assembled from Vanderbilt's own vector art on the live college
+site (the dimensional-metallic V + the "VANDERBILT" logotype, copied verbatim; college name set in a
+serif). See [the guidelines §4](../../docs/brand/ccc-brand-guidelines.md#4-logos--lockups) for
+provenance and usage rules.
 
 ## Why branding is part config, not all code
 
@@ -37,10 +44,13 @@ Do this on the local stack first (`connor-server`), confirm, then repeat on AWS 
    contents of [`ccc-custom-head.html`](./ccc-custom-head.html). Save.
 3. **Primary color** — Settings → Customization → **Application primary color** → `#946E24` (Oak). The
    CSS sets this too, but the setting also drives a few server-rendered spots, so set both.
-4. **Logo** — Settings → Customization → **Logo** → upload the authorized CCC lockup (PNG/SVG, ≥250 px
-   wide). Until then, [`assets/ccc-logo-placeholder.svg`](./assets/ccc-logo-placeholder.svg) is a
-   stand-in — **not** an official mark.
-5. **Favicon** — Settings → Customization → **Favicon** → upload (32×32 or SVG).
+4. **Logo** — Settings → Customization → **Logo** → upload
+   [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg) (white text — pairs with the dark
+   header this theme sets). On a light header, use [`assets/ccc-logo.svg`](./assets/ccc-logo.svg)
+   instead. If your BookStack build rejects SVG uploads (some lock down SVG for security), export the
+   chosen file to a transparent PNG ~480 px wide and upload that.
+5. **Favicon** — Settings → Customization → **Favicon** → upload
+   [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) (the gold V), or a 32×32 PNG export of it.
 6. Hard-refresh (Cmd/Ctrl+Shift+R) and run the validation checklist below.
 
 ## Validation checklist (WCAG 2.2 AA)
@@ -66,13 +76,14 @@ repo (BookStack isn't running in CI), so it's a manual gate against the live ins
 - [ ] **Screen reader smoke test.** One full read flow with VoiceOver (macOS) or NVDA (Windows): the
       logo's accessible name reads sensibly, headings outline correctly, links aren't all "read more."
 
-## Trademark / authorization
+## Trademark / usage
 
-Vanderbilt marks are **for authorized use only**. This repo ships no official logo, Star V, seal, or
-school lockup — only the text placeholder in `assets/`. Obtaining the authorized CCC school lockup
-(clear-space-correct, ≥250 px) from Vanderbilt Brand Communications is a VUIT-coordination dependency,
-tracked in the [VUIT checklist](../../docs/runbooks/vuit-coordination-checklist.md). Do not recreate,
-trace, or approximate an official mark.
+The marks in `assets/` are CCC's own, assembled from Vanderbilt's published web vectors — appropriate
+**internal** use of the college's brand on its own wiki. Use them as-is: don't recolor or redraw the V,
+and keep clear space around the lockup (roughly the width of the V's interior negative space). For
+**print, large-format, or anything externally distributed**, get the master art file (with metallic-ink
+and clear-space specs) from Vanderbilt Brand Communications — tracked in the
+[VUIT checklist](../../docs/runbooks/vuit-coordination-checklist.md).
 
 ## Adopting a licensed brand font (later)
 
