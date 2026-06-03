@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+region      = "us-east-1"   # confirm with VUIT
+environment = "prod"
+
+# --- THE access control. Empty = ALB ingress is fully closed (fails safe). Get from VUIT. ---
+vpn_ingress_cidrs = [
+  # "129.59.0.0/16",     # EXAMPLE ONLY — replace with VUIT-supplied VPN egress CIDRs
+]
+
+# --- DNS / TLS ---
+domain_name = "wiki.ccc.vanderbilt.edu"   # exact name TBD with VUIT
+# Supply ONE of:
+#   certificate_arn  -> use an imported VUIT (Sectigo/InCommon) or pre-issued ACM cert (recommended
+#                       when VUIT owns DNS, since ACM DNS-validation needs records in their zone).
+#   route53_zone_id  -> only if the zone lives in THIS account (then TF issues + validates ACM).
+certificate_arn = ""
+route53_zone_id = ""
+
+# --- Sizing (Balanced) ---
+instance_type     = "t4g.small"
+db_instance_class = "db.t4g.small"
+
+# --- Ops ---
+alarm_email        = ""   # e.g. "ccc-ops@vanderbilt.edu"
+log_retention_days = 90

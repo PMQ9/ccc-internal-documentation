@@ -1,0 +1,81 @@
+# CCC Internal Documentation — LOCAL validation stack (connor-server)
+#
+# Purpose: prove BookStack behavior (public read, RBAC, media-on-a-persistent-volume,
+# revision history, persistence, backup/restore) BEFORE deploying to AWS. Uses the same
+# BookStack configuration KEYS we'll use in production so the contract is validated here.
+#
+# Differences from AWS prod (intentional, documented in ../../docs/architecture.md):
+#   - MariaDB runs as a container here; on AWS it is RDS MySQL 8.0 Multi-AZ.
+#   - Media (images + attachments) lives in a Docker named volume here; on AWS it is EFS.
+#   - No MinIO/S3: per the design decision, ALL media lives on a persistent volume.
+#   - Plain HTTP here; on AWS, TLS terminates at an ALB (ACM cert).
+#   - AUTH_METHOD=standard here (real Shibboleth is unreachable from the LAN); SAML2 on AWS.
+#
+# Run:  cp .env.example .env  &&  edit .env  &&  docker compose up -d
+# See README.md for the APP_KEY generation step and the full verification checklist.
+
+name: ccc-wiki
+
+services:
+  db:
+    image: lscr.io/linuxserver/mariadb:${MARIADB_TAG:-latest}
+    container_name: ccc-wiki-db
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-America/Chicago}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      - MYSQL_DATABASE=${DB_DATABASE:-bookstackapp}
+      - MYSQL_USER=${DB_USERNAME:-bookstack}
+      - MYSQL_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - db_data:/config
+    restart: unless-stopped
+    healthcheck:
+      # Verified on connor-server; adjust if the image ships a different client.
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 --silent || mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  bookstack:
+    image: lscr.io/linuxserver/bookstack:${BOOKSTACK_TAG:-latest}
+    container_name: ccc-wiki-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-America/Chicago}
+      # APP_URL MUST equal the exact URL you browse to (LAN IP or tunnel), or links/SAML break.
+      - APP_URL=${APP_URL:?set APP_URL to the exact URL you browse to (e.g. http://10.76.88.214)}
+      # Generate ONCE (see README) and never change it (changing invalidates sessions + 2FA).
+      - APP_KEY=${APP_KEY:?generate with the appkey command in README and set in .env}
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USERNAME=${DB_USERNAME:-bookstack}
+      - DB_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
+      - DB_DATABASE=${DB_DATABASE:-bookstackapp}
+      - QUEUE_CONNECTION=database
+      # --- Auth ---
+      # Local default = standard (DB login). RBAC + public-read behavior is identical to prod.
+      # Set AUTH_METHOD=saml2 + the SAML2_* vars (see .env.example) to smoke-test SSO wiring
+      # against a mock IdP. AUTH_AUTO_INITIATE stays false so the local /login break-glass
+      # form is always reachable (mirrors prod resilience requirement).
+      - AUTH_METHOD=${AUTH_METHOD:-standard}
+      - AUTH_AUTO_INITIATE=${AUTH_AUTO_INITIATE:-false}
+      # --- Revision history: indefinite (diffs + one-click restore are built in) ---
+      - REVISION_LIMIT=${REVISION_LIMIT:-false}
+    volumes:
+      # /config holds ALL persistent state: .env, files/ (attachments), images/, logs, cache.
+      # This single volume is the durability boundary (EFS on AWS).
+      - bookstack_config:/config
+    ports:
+      - "${HTTP_BIND:-80}:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  bookstack_config:

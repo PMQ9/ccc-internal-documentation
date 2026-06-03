@@ -1,0 +1,91 @@
+# Architecture — CCC Internal Documentation Platform
+
+Self-hosted **BookStack** wiki for College of Connected Computing staff. Read on Vanderbilt VPN
+with no login; edit/admin via Vanderbilt SSO. Proven on `connor-server`, then promoted to AWS.
+
+## Requirements → how they're met
+
+| Requirement | Mechanism |
+|---|---|
+| BookStack, browser-only editing | LinuxServer BookStack image (`v26.05-ls265`), WYSIWYG/markdown editor |
+| Reachable only on Vanderbilt VPN | ALB ingress Security Group = VUIT VPN-CIDR managed prefix list (see security note) |
+| Read without login | BookStack "Allow public viewing" + Public role (View only) |
+| Edit/admin via SSO | SAML2 against Vanderbilt Shibboleth IdP (`AUTH_METHOD=saml2`) |
+| Roles Viewer/Editor/Admin | Built-in BookStack roles (Viewer **is** built-in in v26.05) |
+| Revision history + diff + restore | BookStack built-in (`page_revisions`); validated on connor-server |
+| AWS via VUIT | Terraform footprint in [../terraform](../terraform) |
+| Attachments separate from server | Media on **EFS**, decoupled from the disposable EC2 instance, backed up via AWS Backup |
+| Vanderbilt subdomain | ALB + ACM/Sectigo cert; DNS via VUIT |
+
+## Security model — honest framing
+
+The requirement is "unreachable off-VPN." Two ways to deliver it:
+
+- **Chosen (v1): internet-facing ALB + Security-Group allowlist** of Vanderbilt VPN egress CIDRs.
+  This is **IP-allowlisting**, not topological isolation: the ALB DNS name resolves publicly and a
+  TLS listener exists; only allowed source IPs complete a connection. Correctness depends entirely on
+  the VUIT-supplied CIDRs being accurate and current (they are a managed prefix list, treated as
+  config). Campus egress NAT pools may be shared, so this is "allowlisted to VPN/campus egress."
+  Hardening: no `0.0.0.0/0` ingress, TLS-only, default-deny SGs; **add AWS WAF** for defense-in-depth.
+- **Stronger (future): internal ALB** with VUIT routing the VPN into the VPC (TGW/DX/peering) +
+  split-horizon DNS → unreachable off-VPN by *topology*. Migration path: flip `aws_lb.internal=true`,
+  move to private-only DNS, drop the public listener. Adopt if/when VUIT can route in.
+
+## Components (AWS prod)
+
+```
+Vanderbilt VPN client
+   │  HTTPS (443), source IP ∈ VUIT VPN prefix list
+   ▼
+[ Internet-facing ALB ]  ACM/Sectigo cert · TLS1.2+ · HTTP→HTTPS · health=/icon.png (DB-free)
+   │  HTTP 80 (SG: from ALB only)
+   ▼
+[ EC2 t4g.small, ASG(1) across 2 AZs, private subnet ]  docker-compose → BookStack container
+   ├── MySQL 3306 ─────▶ [ RDS MySQL 8.0 db.t4g.small, Multi-AZ, private ]  (master secret in SM)
+   └── NFS 2049 ───────▶ [ EFS /config: images + attachments ]  (AWS Backup)
+Secrets Manager: APP_KEY, break-glass admins, SAML certs   SSM: APP_URL, auth_method, SAML endpoints
+CloudWatch: container logs + alarms → SNS                  Single NAT + S3 gateway endpoint
+```
+
+Decisions (confirmed with the requester): internet-facing ALB + SG allowlist; **all media on a
+persistent volume** (EFS, not S3 — sidesteps BookStack's public-read-image-on-S3 conflict with S3
+Block-Public-Access, and survives instance replacement); **Balanced** cost/HA (Multi-AZ DB, single
+NAT, trimmed endpoints); Terraform IaC.
+
+## BookStack configuration (the load-bearing bits)
+
+- **Public read** is a UI toggle ("Allow public viewing") + the **Public** role granted View only —
+  not an env var. Anonymous read needs no IdP round-trip, so an IdP outage degrades to read-only.
+- **Roles:** Admin / Editor / **Viewer** are built-in in v26.05. Set **Viewer as the Default
+  Registration Role** so auto-registered SSO users are read-only by default — otherwise every SSO
+  user could land with edit rights.
+- **SAML2:** explicit `SAML2_IDP_*` (no per-login metadata fetch). `AUTH_AUTO_INITIATE=false` keeps a
+  local `/login` form reachable for break-glass during IdP outages. Expect `SAML2_IDP_AUTHNCONTEXT=false`
+  (Vanderbilt Duo/MFA). **Group→role sync is OFF at launch** — `SAML2_REMOVE_FROM_GROUPS=true` plus a
+  wrong/unreleased group attribute would strip everyone's roles on next login (lockout-class). Enable
+  only after confirming the released attribute end-to-end with `SAML2_DUMP_USER_DETAILS=true`.
+- **Break-glass:** ≥2 local admins (passwords in Secrets Manager), independent of SAML.
+- **Proxy:** `APP_PROXIES` = ALB subnet CIDRs (never `*` behind an IP-allowlisted public ALB).
+- **Revisions:** `REVISION_LIMIT=false` (indefinite) — reconcile with any VU records-retention policy.
+
+## Findings validated on connor-server (BookStack v26.05-ls265 / MariaDB 11.4.12)
+
+- Anonymous gating, admin login, admin RBAC: **pass**. Edit/admin require login.
+- **Revision history** records every edit (3 revisions after create + 2 edits); diff + one-click restore.
+- **Media on the persistent volume**: attachments → `/config/www/files/`, images → `/config/www/uploads/images/`.
+- **Persistence**: data + media identical across `docker compose down && up`.
+- **Backup/restore drill**: DB dump + media archive restored together into a wiped stack; fingerprint matched.
+- **v26.05 schema**: no `books`/`pages` tables — unified `entities` + `entity_page_data` (backup/restore is
+  whole-DB, so transparent; don't write ad-hoc queries against `books`/`pages`).
+- LinuxServer MariaDB `root@localhost` uses `unix_socket` auth — back up as the app user over TCP.
+- **Health check** uses `/icon.png` (static, ~0.7ms, no PHP/DB), not `/status` (PHP/DB, ~18ms).
+
+## What is NOT faithfully testable locally (AWS-only)
+
+VPN SG enforcement · real Shibboleth attribute release · ACM/ALB TLS · RDS Multi-AZ failover ·
+EFS auto-heal across instance replacement. Covered in the AWS verification section of the root README.
+
+## See also
+
+[../terraform/README.md](../terraform/README.md) · [../deploy/local/README.md](../deploy/local/README.md) ·
+runbooks in [runbooks/](runbooks/).
