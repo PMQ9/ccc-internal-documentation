@@ -1,0 +1,21 @@
+# trivy misconfiguration ignores — intentional, documented architectural decisions.
+# Each maps to a decision in docs/architecture.md "Security model — honest framing".
+# Revisit on every provider bump. Everything NOT listed here hard-fails CI.
+
+# AWS-0053 — "Load balancer is exposed publicly" (aws_lb.internal = false).
+# DELIBERATE v1 decision: internet-facing ALB whose ingress SG admits ONLY the VUIT
+# VPN managed prefix list (no 0.0.0.0/0 ingress). The stronger internal-ALB topology
+# is the documented future option, gated on VUIT routing the VPN into the VPC.
+AVD-AWS-0053
+
+# AWS-0104 — "unrestricted egress" (app SG: 443 to 0.0.0.0/0).
+# DELIBERATE: the instance must reach ECR/registry (image pulls), Secrets Manager,
+# SSM, and IdP metadata over the NAT; those endpoints have no stable, pinnable CIDR.
+# Tightening this to VPC interface endpoints is the documented hardening follow-up.
+AVD-AWS-0104
+
+# AWS-0136 — "Topic encryption does not use a customer managed key".
+# The alarms topic is encrypted with the AWS-managed SNS key (alias/aws/sns). A
+# customer-managed CMK (key policy + rotation + cost) is unwarranted for ops
+# alarm metadata; AWS-managed encryption is the deliberate choice.
+AVD-AWS-0136

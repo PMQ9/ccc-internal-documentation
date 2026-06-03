@@ -1,0 +1,60 @@
+name: terraform-plan (AWS, manual)
+
+# The AWS phase is gated on VUIT inputs and isn't applied yet (see terraform/README.md).
+# This pipeline is ready for that phase: a manual, OIDC-authenticated `terraform plan`
+# against the real account. It NO-OPS safely until the repo variables below are set,
+# so it never fails before the AWS phase begins.
+#
+# To enable, set repository Variables (Settings -> Secrets and variables -> Actions -> Variables):
+#   AWS_ROLE_ARN     IAM role for GitHub OIDC to assume (least-priv plan/apply role)
+#   AWS_REGION       e.g. us-east-1
+#   TFSTATE_BUCKET   the pre-created remote-state bucket (see terraform/backend.tf)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC federation to AWS — no long-lived keys
+
+jobs:
+  plan:
+    name: terraform plan
+    runs-on: ubuntu-latest
+    environment: prod-plan # optional manual-approval gate for anything touching prod creds
+    steps:
+      - name: Guard — is the AWS phase configured?
+        id: guard
+        run: |
+          if [ -z "${{ vars.AWS_ROLE_ARN }}" ] || [ -z "${{ vars.TFSTATE_BUCKET }}" ] || [ -z "${{ vars.AWS_REGION }}" ]; then
+            echo "::notice::AWS phase not configured (set repo vars AWS_ROLE_ARN, AWS_REGION, TFSTATE_BUCKET). Nothing to plan."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: steps.guard.outputs.go == 'true'
+
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        if: steps.guard.outputs.go == 'true'
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        if: steps.guard.outputs.go == 'true'
+        with:
+          terraform_version: "1.13.3"
+          terraform_wrapper: false
+
+      - name: terraform init + plan
+        if: steps.guard.outputs.go == 'true'
+        working-directory: terraform
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TFSTATE_BUCKET }}" \
+            -backend-config="key=ccc-wiki/prod/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+          terraform plan -input=false -no-color

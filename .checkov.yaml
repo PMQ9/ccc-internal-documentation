@@ -1,0 +1,47 @@
+# Checkov config for the CCC BookStack Terraform.
+# Findings are signal, not law (devops-cicd skill): we hard-fail on everything
+# EXCEPT the checks below. Each skip is a false positive, an app limitation, an
+# AWS-managed-key-vs-CMK preference, or a documented v1 scope/cost decision
+# (see docs/architecture.md). Genuinely actionable gaps were FIXED, not skipped
+# (e.g. SNS-topic encryption). Revisit this list on every provider bump.
+framework:
+  - terraform
+quiet: true
+compact: true
+soft-fail: false # any non-skipped finding fails the build
+skip-check:
+  # --- False positive ------------------------------------------------------
+  # CKV_AWS_260: flags port-80 ingress it can't classify. Our two port-80 rules
+  # source from the VPN managed prefix list and the ALB SG — NEVER 0.0.0.0/0.
+  # Proven by terraform test TF-001 (asserts cidr_ipv4 == null on these rules).
+  - CKV_AWS_260
+
+  # --- App / platform limitations -----------------------------------------
+  # RDS IAM database auth is unsupported by BookStack (native MySQL auth only).
+  - CKV_AWS_161
+
+  # --- AWS-managed KMS is sufficient; a customer-managed CMK is unwarranted
+  #     key-management overhead for these resources. -------------------------
+  - CKV_AWS_149 # Secrets Manager secret not using a CMK
+  - CKV_AWS_354 # RDS Performance Insights not using a CMK
+  - CKV_AWS_184 # resource not using a CMK
+  - CKV_AWS_166 # Backup vault not using a CMK
+  - CKV_AWS_158 # CloudWatch log group not using a CMK
+
+  # --- Non-secret config; secrets live in Secrets Manager ------------------
+  # SSM params hold app_url / auth_method / SAML endpoints (all non-secret by
+  # design). SecureString is not needed; real secrets are in Secrets Manager.
+  - CKV2_AWS_34
+
+  # --- Rotation is manual/forbidden by design ------------------------------
+  # APP_KEY must NEVER auto-rotate (rotating invalidates all sessions + 2FA —
+  # documented footgun). SAML certs + break-glass rotate manually per runbooks.
+  - CKV2_AWS_57
+
+  # --- Documented v1 scope / cost decisions (architecture.md) --------------
+  - CKV2_AWS_28 # WAF on the public ALB — documented defense-in-depth follow-up
+  - CKV_AWS_91  # ALB access logging to S3 — deferred; ALB metrics + alarms cover observability
+  - CKV_AWS_338 # CloudWatch retention >=1yr — deliberate 90d cost choice (var.log_retention_days)
+  - CKV_AWS_118 # RDS enhanced monitoring — Performance Insights + alarms cover monitoring
+  - CKV2_AWS_11 # VPC flow logs — deferred for v1 (cost); enable if VUIT security requires
+  - CKV2_AWS_12 # VPC default SG not locked down — it is UNUSED (all resources attach purpose-built SGs)

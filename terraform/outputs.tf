@@ -9,11 +9,13 @@ output "alb_zone_id" {
 }
 
 output "app_url" {
-  value = var.domain_name == "" ? "https://${aws_lb.this.dns_name}" : "https://${var.domain_name}"
+  description = "The URL the wiki is served at (custom domain if set, else the ALB DNS name)."
+  value       = var.domain_name == "" ? "https://${aws_lb.this.dns_name}" : "https://${var.domain_name}"
 }
 
 output "rds_endpoint" {
-  value = aws_db_instance.this.address
+  description = "RDS instance address (the DB host the app connects to)."
+  value       = aws_db_instance.this.address
 }
 
 output "rds_master_secret_arn" {
@@ -22,7 +24,8 @@ output "rds_master_secret_arn" {
 }
 
 output "efs_id" {
-  value = aws_efs_file_system.this.id
+  description = "EFS file system id holding BookStack media (/config)."
+  value       = aws_efs_file_system.this.id
 }
 
 output "vpn_prefix_list_id" {
@@ -31,7 +34,8 @@ output "vpn_prefix_list_id" {
 }
 
 output "certificate_arn" {
-  value = local.certificate_arn
+  description = "ARN of the TLS certificate bound to the HTTPS listener (imported or ACM-issued)."
+  value       = local.certificate_arn
 }
 
 output "acm_dns_validation_records" {
@@ -55,7 +59,8 @@ output "saml_sp_urls" {
 }
 
 output "sns_alarm_topic_arn" {
-  value = aws_sns_topic.alarms.arn
+  description = "SNS topic ARN that CloudWatch alarms publish to."
+  value       = aws_sns_topic.alarms.arn
 }
 
 output "breakglass_secret_arn" {

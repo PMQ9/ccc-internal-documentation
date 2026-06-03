@@ -1,0 +1,62 @@
+name: weekly
+
+# Scheduled deeper checks the PR pipeline is too slow (or too point-in-time) to run:
+#   - the FULL integration drill incl. backup/restore + the durability boundary
+#   - upstream image DRIFT detection (run the contract against :latest)
+#   - image CVE scan of the pinned images (when to bump the pin)
+#   - online link check (catch dead external links the PR's offline check skips)
+on:
+  schedule:
+    - cron: "17 9 * * 1" # Mondays 09:17 UTC (~03:17 America/Chicago)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-drill-pinned:
+    name: full drill · pinned images (gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: full integration drill (backup/restore + boundary)
+        run: tests/integration/run.sh --profile full
+
+  upstream-drift-latest:
+    name: upstream drift · latest images (signal)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Drift tests UPSTREAM, not our code — surface it, don't block the schedule.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: run the contract against the latest BookStack + MariaDB
+        run: BOOKSTACK_TAG=latest MARIADB_TAG=latest tests/integration/run.sh --profile full
+
+  image-cve:
+    name: image CVE scan · pinned images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: trivy image scan (report-only — informs when to bump the pin)
+        run: |
+          for img in \
+            lscr.io/linuxserver/bookstack:v26.05-ls265 \
+            lscr.io/linuxserver/mariadb:11.4.12-r0-ls220 ; do
+            echo "::group::trivy $img"
+            docker run --rm aquasec/trivy:0.71.0 image \
+              --exit-code 0 --severity HIGH,CRITICAL --no-progress --scanners vuln "$img"
+            echo "::endgroup::"
+          done
+
+  links-online:
+    name: docs · link check (online)
+    runs-on: ubuntu-latest
+    continue-on-error: true # external sites flake; this is a watch, not a gate
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: lychee (incl. external URLs)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work lycheeverse/lychee:0.15.1 \
+            --no-progress --max-concurrency 4 --exclude-path .github './**/*.md'
