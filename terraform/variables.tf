@@ -164,6 +164,7 @@ variable "alarm_email" {
 # App config (non-secret; secret values are generated/placeholder in Secrets Manager)
 ############################
 variable "app_timezone" {
-  type    = string
-  default = "America/Chicago"
+  description = "IANA timezone for the BookStack container (TZ)."
+  type        = string
+  default     = "America/Chicago"
 }

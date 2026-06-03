@@ -1,0 +1,120 @@
+name: ci
+
+# PR pipeline: prove the repo is shippable in minutes, with zero cloud creds.
+# Every tool runs pinned (actions by commit SHA, scanners by image tag) so the
+# pipeline is reproducible and the same versions run locally via `make check`.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TF_VERSION: "1.13.3"
+
+jobs:
+  terraform:
+    name: terraform · fmt · validate · tflint · test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: terraform fmt -recursive -check -diff
+      - name: terraform init (no backend, no creds)
+        run: terraform init -backend=false -input=false
+      - name: terraform validate
+        run: terraform validate
+      - uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4.1.1
+        with:
+          tflint_version: v0.63.1
+      - name: tflint
+        run: tflint --init && tflint --recursive --format=compact
+      - name: terraform test (plan-time security/edge assertions, mocked providers)
+        run: terraform test
+
+  iac-security:
+    name: iac security · trivy · checkov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: trivy config scan (terraform)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work aquasec/trivy:0.71.0 \
+            config --exit-code 1 --severity HIGH,CRITICAL --no-progress terraform
+      - name: checkov scan (terraform)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work --entrypoint checkov \
+            bridgecrew/checkov:3.2.532 -d terraform --config-file /work/.checkov.yaml --compact --quiet
+
+  lint:
+    name: lint · shell · compose · actions · pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: render user-data template for shellcheck
+        run: ./tests/lib/render_user_data.sh > "$RUNNER_TEMP/user_data.rendered.sh"
+      - name: shellcheck (incl. rendered user-data)
+        run: |
+          cp "$RUNNER_TEMP/user_data.rendered.sh" ./user_data.rendered.sh
+          docker run --rm -v "$PWD":/work -w /work koalaman/shellcheck:v0.10.0 \
+            --shell=bash --severity=warning \
+            deploy/local/verify.sh tests/lib/common.sh tests/lib/render_user_data.sh \
+            tests/integration/run.sh tests/integration/helpers/load.bash user_data.rendered.sh
+      - name: docker compose config validates
+        run: |
+          BOOKSTACK_TAG=test MARIADB_TAG=test APP_URL=http://localhost APP_KEY=base64:x \
+            DB_ROOT_PASSWORD=x DB_PASSWORD=x \
+            docker compose -f deploy/local/compose.yaml config -q
+          echo "compose OK"
+      - name: user-data contract (rendered template fetches secrets, bakes none)
+        run: ./tests/lib/check_user_data_contract.sh
+      - name: actionlint (CI lints itself)
+        run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.12 -color
+      - name: no floating ':latest' in committed prod config
+        run: |
+          # Exclude comment lines (e.g. the documented appkey-gen command uses :latest).
+          m=$(grep -hE ':latest' deploy/local/.env.example terraform/variables.tf | grep -vE '^[[:space:]]*#' || true)
+          if [ -n "$m" ]; then echo "::error::floating :latest pin in committed config: $m"; exit 1; fi
+          echo "no :latest pins OK"
+
+  secrets:
+    name: secrets · gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: gitleaks (tree scan)
+        run: |
+          docker run --rm -v "$PWD":/work ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            detect --source=/work --config=/work/.gitleaks.toml --no-git --redact --verbose
+
+  links:
+    name: docs · link check (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: lychee (local file links only)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work lycheeverse/lychee:0.15.1 \
+            --offline --no-progress --exclude-path .github './**/*.md'
+
+  integration:
+    name: integration · stack + bats + stress (PR profile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: run integration suite
+        run: tests/integration/run.sh --profile pr

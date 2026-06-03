@@ -6,7 +6,10 @@ resource "aws_cloudwatch_log_group" "app" {
 
 resource "aws_sns_topic" "alarms" {
   name = "${var.name_prefix}-alarms"
-  tags = { Name = "${var.name_prefix}-alarms" }
+  # Encrypt alarm notifications at rest with the AWS-managed SNS key (free, no
+  # rotation to manage) — consistent with the "encryption at rest everywhere" posture.
+  kms_master_key_id = "alias/aws/sns"
+  tags              = { Name = "${var.name_prefix}-alarms" }
 }
 
 resource "aws_sns_topic_subscription" "email" {

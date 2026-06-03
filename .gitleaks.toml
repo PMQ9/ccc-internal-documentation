@@ -1,0 +1,31 @@
+# gitleaks config for the CCC docs platform.
+# Extends the upstream default ruleset and adds an allowlist for the *intentional*
+# placeholders in committed example files (these are not real secrets — they are
+# the documented "fill me in" markers).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders in *.example/docs and intentionally-fake test tokens are not real secrets"
+paths = [
+  '''.*\.example$''',
+  '''deploy/local/\.env\.example''',
+  '''terraform/terraform\.tfvars\.example''',
+  '''terraform/backend\.hcl\.example''',
+  '''docs/.*\.md$''',
+  '''README\.md''',
+  # Integration test fixtures: deliberately malformed/fake tokens used by negative
+  # tests (never real secrets; the runner mints real ephemeral tokens at runtime).
+  '''tests/integration/bats/.*\.bats''',
+]
+# Documented placeholder values that look secret-ish but are deliberately fake.
+regexes = [
+  '''change-me-root''',
+  '''change-me-app''',
+  '''PLACEHOLDER-set-during-VUIT-coordination''',
+  '''SET-FROM-VUIT''',
+  '''admin@admin\.com''',
+  '''only-one-part''',
+  '''not-a-real-secret''',
+  '''deadbeef:''',
+]
