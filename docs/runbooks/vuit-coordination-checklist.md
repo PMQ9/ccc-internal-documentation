@@ -13,7 +13,8 @@ External dependencies that are NOT Terraform-able. Track each to "done" before t
 | 7 | **Attribute release (per-SP)** | Release: `mail`, `givenName`+`sn`, a stable `eduPersonPrincipalName` (external ID), and — for role sync — a group attribute (`isMemberOf`/`eduPersonScopedAffiliation`). **Confirm exact released names.** | env mapping | ☐ |
 | 8 | **Group provisioning (role sync)** | If using automatic Editor/Admin mapping: have VUIT create a Grouper group released via the group attribute. Until then, promote admins/editors manually (group sync stays OFF) | Decision | ☐ |
 | 9 | **AuthnContext / Duo** | Confirm whether forcing `PasswordProtectedTransport` clashes with Duo/MFA; if so set `SAML2_IDP_AUTHNCONTEXT=false` | Phase 2 | ☐ |
-| 10 | **Accessibility sign-off** | WCAG 2.2 AA review of the themed deployment (reader + editor surfaces) | Phase 3 | ☐ |
+| 10 | **Accessibility sign-off** | WCAG 2.2 AA review of the themed deployment (reader + editor surfaces) — run the checklist in [../../deploy/branding/README.md](../../deploy/branding/README.md) | Phase 3 | ☐ |
+| 11 | **Brand assets — master/print files** | The wiki ships the CCC lockup + favicon built from Vanderbilt's own web vectors (fine for on-screen use). For print, large-format, or externally distributed material, obtain the master lockup (metallic-ink / clear-space specs) from Vanderbilt Brand Communications | Phase 3 | ☐ |
 
 Where each value lands: IdP endpoints/attribute names → SSM (`/ccc-wiki/saml_*`, `auth_method`);
 IdP/SP certs/keys → Secrets Manager (`ccc-wiki/saml/*`); CIDRs → `terraform.tfvars`
