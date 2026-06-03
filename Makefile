@@ -39,7 +39,9 @@ validate: ## terraform validate (no backend, no creds)
 
 .PHONY: tflint
 tflint: ## tflint (recursive) with the AWS ruleset
-	$(DKR_TF) --entrypoint sh $(TFLINT_IMG) -c 'tflint --init && tflint --recursive --format=compact'
+	# -e GITHUB_TOKEN: authenticate the ruleset download so `tflint --init` doesn't hit
+	# the 60 req/hr unauthenticated GitHub API cap (see ci.yml). No-op if the var is unset.
+	$(DKR_TF) -e GITHUB_TOKEN --entrypoint sh $(TFLINT_IMG) -c 'tflint --init && tflint --recursive --format=compact'
 
 .PHONY: tf-test
 tf-test: ## terraform test — plan-time security/edge assertions (mocked providers)

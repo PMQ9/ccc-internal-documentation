@@ -41,6 +41,12 @@ jobs:
         with:
           tflint_version: v0.63.1
       - name: tflint
+        env:
+          # `tflint --init` fetches the AWS ruleset from the GitHub releases API.
+          # Unauthenticated that API is 60 req/hr per IP, shared across all GitHub-hosted
+          # runners — so the download intermittently 403s ("rate limit exceeded"). The
+          # auto-provided token lifts it to 1000 req/hr/repo (contents:read above suffices).
+          GITHUB_TOKEN: ${{ github.token }}
         run: tflint --init && tflint --recursive --format=compact
       - name: terraform test (plan-time security/edge assertions, mocked providers)
         run: terraform test
