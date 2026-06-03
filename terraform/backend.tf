@@ -10,7 +10,7 @@
 #
 # Then init with the values in backend.hcl:  terraform init -backend-config=backend.hcl
 #
-# S3 native state locking (use_lockfile, provider >= 5.60 / TF >= 1.10) avoids a DynamoDB table.
+# S3 native state locking (use_lockfile — an S3-backend feature in TF >= 1.10) avoids a DynamoDB table.
 terraform {
   backend "s3" {
     # bucket       = "ccc-wiki-tfstate-<acct>"   # via backend.hcl
