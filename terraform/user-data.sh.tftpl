@@ -59,6 +59,9 @@ cat > /srv/bookstack/.env <<EOF
 PUID=1000
 PGID=1000
 TZ=${timezone}
+# Site name shown in the header + browser title (CCC branding). Full theming (colors,
+# logo, a11y CSS) is applied via Settings → Customization; see deploy/branding/README.md.
+APP_NAME=CCC Wiki
 APP_URL=$APP_URL
 APP_KEY=$APP_KEY
 APP_DEBUG=false

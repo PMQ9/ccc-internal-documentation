@@ -88,4 +88,6 @@ EFS auto-heal across instance replacement. Covered in the AWS verification secti
 ## See also
 
 [../terraform/README.md](../terraform/README.md) · [../deploy/local/README.md](../deploy/local/README.md) ·
+[brand/ccc-brand-guidelines.md](brand/ccc-brand-guidelines.md) (design language) ·
+[../deploy/branding/README.md](../deploy/branding/README.md) (apply + a11y validation) ·
 runbooks in [runbooks/](runbooks/).

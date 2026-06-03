@@ -1,0 +1,185 @@
+<!--
+  CCC Internal Documentation — BookStack custom head content
+  ===========================================================
+  Brand: Vanderbilt College of Connected Computing. Spec: ../../docs/brand/ccc-brand-guidelines.md
+  Target: WCAG 2.2 AA (Vanderbilt standard). Validated against BookStack v26.05-ls265.
+
+  HOW TO APPLY (see ./README.md for the full procedure + validation checklist):
+    Settings → Customization → "Custom HTML Head Content" → paste this whole block → Save.
+  BookStack injects this near the end of <head>, AFTER its own variable definitions, so the
+  :root overrides below win without needing !important on the variables.
+
+  WHY THIS APPROACH: BookStack branding is part DB config (logo upload, primary color) and part
+  custom head CSS — the same category as the public-read toggle and default role, which this repo
+  already treats as documented UI steps (see docs/architecture.md). The PHP theme system is marked
+  "not stable" upstream, so we use the supported custom-head mechanism and keep it version-controlled.
+
+  This file is intentionally self-contained: no external network requests (no web fonts, no CDNs),
+  so it works on a VPN-only deployment and adds zero render-blocking round-trips.
+-->
+
+<style id="ccc-brand">
+  /* ----------------------------------------------------------------------
+     1. CCC design tokens  (single source of truth; edit here, not inline)
+     Hex values are contrast-verified — see the pairings table in the spec.
+     ---------------------------------------------------------------------- */
+  :root {
+    /* Core */
+    --ccc-black:       #1C1C1C;  /* primary ink / header bar */
+    --ccc-white:       #FFFFFF;  /* primary surface          */
+    --ccc-gold-flat:   #CFAE70;  /* accent surface (black text only) */
+    --ccc-gold-oak:    #946E24;  /* AA-safe gold for links/buttons   */
+    --ccc-highlight:   #ECB748;  /* active accent / focus core (black text only) */
+    /* Neutrals */
+    --ccc-gray-dark:   #777777;
+    --ccc-gray-light:  #E4E4E4;
+    --ccc-sand:        #E0D5C0;
+    --ccc-cream:       #F5F3EF;  /* app chrome / sidebar */
+    /* Saturated tints (decorative) */
+    --ccc-sky:         #B3C9CD;
+    --ccc-sage:        #8BA18E;
+
+    /* Typography — system stacks (no licensed-font dependency; see spec §7).
+       To adopt a licensed Vanderbilt brand font later, change ONLY these two
+       lines and add the @font-face / <link> above this <style>. */
+    --ccc-font-heading: Georgia, "Times New Roman", "Source Serif Pro", serif;
+    --ccc-font-body:    system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    /* ---- Map CCC tokens onto BookStack's own CSS variables ----
+       These names are from BookStack resources/sass/_colors.scss. Setting the
+       "Application primary color" in Settings ALSO sets --color-primary; this
+       redeclaration keeps the value correct even if that field is left default. */
+    --color-primary:       var(--ccc-gold-oak);   /* buttons (white label), accents */
+    --color-primary-light: #F2EBDC;               /* tint of oak for hover/selected rows */
+    --color-link:          var(--ccc-gold-oak);   /* link text — paired with underline below */
+  }
+
+  /* ----------------------------------------------------------------------
+     2. Header — the Vanderbilt-signature black bar with a thin gold rule.
+     Higher contrast (white on black = 16.9:1) than a colored bar, and
+     unmistakably Vanderbilt. .primary-background is the class BookStack puts
+     on the header; we override it to ink + a gold bottom accent.
+     ---------------------------------------------------------------------- */
+  header .primary-background,
+  header.primary-background,
+  .primary-background.add-to-dark-mode {
+    background-color: var(--ccc-black) !important;
+    border-bottom: 3px solid var(--ccc-gold-flat);
+  }
+  /* Header text/links stay white for contrast; hover gets the bright gold. */
+  header .primary-background a,
+  header .primary-background .header-search input,
+  header .primary-background button {
+    color: var(--ccc-white);
+  }
+  header .primary-background a:hover { color: var(--ccc-highlight); }
+
+  /* ----------------------------------------------------------------------
+     3. Links — colored AND underlined (never color alone; WCAG 1.4.1).
+     Scope underlines to written content so nav/toolbars aren't cluttered.
+     ---------------------------------------------------------------------- */
+  .page-content a:not(.button):not([class*="text-"]),
+  .pointer .description a,
+  .text-link {
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+  a:hover { color: var(--ccc-gold-oak); }
+
+  /* ----------------------------------------------------------------------
+     4. Primary buttons — white label on Oak (4.65:1). Hover darkens.
+     ---------------------------------------------------------------------- */
+  .button,
+  button.button,
+  input[type="submit"].button {
+    background-color: var(--ccc-gold-oak);
+    color: var(--ccc-white);
+    border-color: var(--ccc-gold-oak);
+  }
+  .button:hover { background-color: #7d5d1e; border-color: #7d5d1e; }
+  /* Outline/secondary buttons: oak text on white, oak border. */
+  .button.outline { color: var(--ccc-gold-oak); background: transparent; }
+
+  /* ----------------------------------------------------------------------
+     5. Chrome — warm cream sidebars/panels with black text.
+     ---------------------------------------------------------------------- */
+  .tri-layout-left,
+  .tri-layout-right,
+  .tri-layout-left-contents,
+  .tri-layout-right-contents { background-color: var(--ccc-cream); }
+
+  /* ----------------------------------------------------------------------
+     6. Accessibility — focus indicator (WCAG 2.4.7 / 2.4.11, non-text 3:1).
+     Layered ring: bright-gold core + ink halo. Visible on white, cream, gold
+     surfaces, AND the black header — no single-color ring covers all four.
+     ---------------------------------------------------------------------- */
+  *:focus { outline: none; }                 /* replaced on the next rule */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible,
+  .button:focus-visible {
+    outline: 3px solid var(--ccc-highlight);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 5px var(--ccc-black);
+    border-radius: 2px;
+  }
+  /* On the black header, invert: ink core + gold halo so it reads on dark. */
+  header .primary-background a:focus-visible,
+  header .primary-background button:focus-visible {
+    outline-color: var(--ccc-black);
+    box-shadow: 0 0 0 5px var(--ccc-highlight);
+  }
+
+  /* ----------------------------------------------------------------------
+     7. Accessibility — touch/click target size ≥ 24×24px (WCAG 2.5.8).
+     BookStack's icon-only controls are often smaller; pad them out.
+     ---------------------------------------------------------------------- */
+  .icon-list-item,
+  button.icon,
+  .header .links a,
+  .editor-toolbar button,
+  .dropdown-search-toggle {
+    min-width: 24px;
+    min-height: 24px;
+  }
+
+  /* ----------------------------------------------------------------------
+     8. Accessibility — honor reduced-motion (WCAG 2.3.3 / vestibular safety).
+     ---------------------------------------------------------------------- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* ----------------------------------------------------------------------
+     9. Typography + readable measure.
+     ---------------------------------------------------------------------- */
+  body, .page-content { font-family: var(--ccc-font-body); }
+  h1, h2, h3, h4, h5, h6,
+  .page-content h1, .page-content h2, .page-content h3 { font-family: var(--ccc-font-heading); }
+  .page-content { line-height: 1.6; }            /* comfortable reading */
+  .page-content p { max-width: 72ch; }           /* measure cap for long-form docs */
+
+  /* ----------------------------------------------------------------------
+     10. Callouts — keep BookStack's info/warning/danger semantics but tint
+     them into the CCC palette. Text stays dark for AA on every tint.
+     ---------------------------------------------------------------------- */
+  .callout.info    { border-left-color: var(--ccc-sky);    }
+  .callout.success { border-left-color: var(--ccc-sage);   }
+  .callout.warning { border-left-color: var(--ccc-highlight); }
+  .callout         { color: var(--ccc-black); }
+</style>
+
+<!--
+  FAVICON / APP ICON:
+  Set via Settings → Customization → "Favicon" (upload). A placeholder is provided at
+  ./assets/ccc-logo-placeholder.svg until the authorized CCC mark is supplied by Brand Communications.
+  Do NOT <link> an external favicon here — keep this block network-free for the VPN-only deployment.
+-->

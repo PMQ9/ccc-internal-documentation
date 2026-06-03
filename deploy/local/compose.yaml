@@ -49,6 +49,8 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=${TZ:-America/Chicago}
+      # Site name shown in the header + browser title (CCC branding). See ../branding/README.md.
+      - APP_NAME=${APP_NAME:-CCC Wiki}
       # APP_URL MUST equal the exact URL you browse to (LAN IP or tunnel), or links/SAML break.
       - APP_URL=${APP_URL:?set APP_URL to the exact URL you browse to (e.g. http://10.76.88.214)}
       # Generate ONCE (see README) and never change it (changing invalidates sessions + 2FA).
