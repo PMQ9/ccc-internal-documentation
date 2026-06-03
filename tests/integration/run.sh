@@ -45,6 +45,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Reject a mistyped profile loudly. Without this, an unknown value (e.g. a typo'd "prod") brings
+# up the stack, runs bats, skips every profile-gated phase, and exits 0 — a false "all passed".
+case "$PROFILE" in
+  bats|pr|full) ;;
+  *) echo "unknown profile: $PROFILE (want bats|pr|full)" >&2; exit 2 ;;
+esac
+
 export PROJECT="${PROJECT:-ccc-wiki-test}"
 PORT="${PORT:-8089}"
 export BASE_URL="http://localhost:$PORT"

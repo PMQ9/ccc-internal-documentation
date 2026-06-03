@@ -22,3 +22,10 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: tf
+
+  # NOTE: no `docker` ecosystem here on purpose. The tool/scanner image pins live only as Makefile
+  # variables + inline workflow `run:` literals, and the BookStack/MariaDB tags come through compose
+  # env-var interpolation (`${BOOKSTACK_TAG:-...}`) — none of which Dependabot's docker updater can
+  # parse (it reads literal `image:` tags in Dockerfiles/compose only). These container pins are
+  # bumped by hand, triggered by weekly.yml's image-CVE scan + upstream-drift jobs. `make pins`
+  # (tests/lib/check_pins.sh) guards them against floating and against Makefile↔CI drift.

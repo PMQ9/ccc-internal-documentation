@@ -148,10 +148,10 @@ Every AC appears here; every test below appears in this matrix. `T-0xx` = integr
 | FN-003 revision history | T-006, T-007 |
 | FN-004 media durability | T-008, T-009 |
 | FN-005 persistence across restart | T-010 |
-| FN-006 durability boundary | T-011 |
-| FN-007 backup/restore together | T-012 |
+| FN-006 durability boundary | T-011 *(weekly `--profile full` only)* |
+| FN-007 backup/restore together | T-012 *(weekly `--profile full` only)* |
 | FN-008 API auth | T-013, T-014 |
-| FN-009 break-glass /login | T-015 |
+| FN-009 break-glass /login | T-015 *(planned — manual until AWS/SAML phase)* |
 | SEC-001 no 0.0.0.0/0 ingress | TF-001, L-IAC |
 | SEC-002 fail-closed empty CIDRs | TF-002 |
 | SEC-003 TLS posture | TF-003 |
@@ -178,6 +178,10 @@ Every AC appears here; every test below appears in this matrix. `T-0xx` = integr
 | PERF-003 concurrent edits | T-019 |
 | PERF-004 large page | T-020 |
 | PERF-005 bulk entities | T-021 |
+
+> **PR vs weekly coverage.** The PR pipeline runs the `pr` profile. **T-011** (durability boundary)
+> and **T-012** (backup/restore together) run only in the weekly `--profile full` drill, so a
+> DR-restore regression can go undetected for up to a week — a green PR is *not* a DR-verified PR.
 
 ## Test cases
 
@@ -213,10 +217,13 @@ Append-only; stable IDs. If a case becomes wrong because an AC was superseded, m
 - **Steps:** create a page, `PUT` it twice with different markdown.
 - **Expected:** `page_revisions` for that page ≥ 2 (this is the automated half of local V9).
 
-#### T-007 — Restore an older revision reverts content + records a new revision
+#### T-007 — Revision history retains old versions; live page renders the newest
 - **Covers:** FN-003 · **Layer:** integration
-- **Steps:** create page (v1), edit (v2); fetch revisions; restore v1 via API.
-- **Expected:** current content == v1; a *new* revision is recorded (count increases, not decreases).
+- **Steps:** create page (v1), edit (v2); assert the v1 marker is still present in `page_revisions`;
+  `GET` the page and confirm it renders the v2 content.
+- **Expected:** old content is retained as a revision (the durable property that makes restore
+  possible) and the live page shows the latest edit. The one-click *restore* action itself is the
+  manual V9 check (deploy/local/README.md), not yet automated in CI.
 
 #### T-008 — Uploaded attachment lands on the persistent volume
 - **Covers:** FN-004 · **Layer:** integration
@@ -262,6 +269,8 @@ Append-only; stable IDs. If a case becomes wrong because an AC was superseded, m
 
 #### T-015 — `/login` reachable with SAML configured + auto-initiate off
 - **Covers:** FN-009 · **Layer:** integration · **Edge:** auth — IdP-down resilience shape
+- **Status:** Planned (AWS-phase / SAML wiring) — **not yet automated**. CI runs with
+  `AUTH_METHOD=standard`, so the SAML break-glass property is currently a manual check (see Known gaps).
 - **Preconditions:** stack restarted with `AUTH_METHOD=saml2`, `AUTH_AUTO_INITIATE=false`, mock/empty
   IdP endpoints.
 - **Steps:** `GET /login`.
@@ -314,8 +323,10 @@ Append-only; stable IDs. If a case becomes wrong because an AC was superseded, m
 - **Covers:** PERF-003 · **Layer:** stress (Python driver) · **Failure mode:** write contention →
   crash / lost update
 - **Steps:** K workers each `PUT` the same page concurrently, then again in a second wave.
-- **Expected:** no 5xx; final revision count == number of successful writes (every accepted write
-  left exactly one revision; none lost, none orphaned); page still readable.
+- **Expected:** no 5xx; the revision count strictly increases over the run (asserted as ≥ +1).
+  BookStack may merge near-simultaneous same-user edits into a single revision, so the invariant is
+  *monotonic growth*, not strict equality with the write count (see the run.sh T-019 note and Risks);
+  page still readable.
 
 ### Non-functional checks — Terraform plan assertions (no AWS creds)
 
@@ -442,8 +453,9 @@ Blind spots that remain even with the plan fully implemented:
 - **Plan-time ≠ apply-time.** `terraform test` with `command = plan` asserts intent; a provider bug
   or drift at apply could still differ. An `command = apply` test needs real AWS and is out of CI.
 - **Concurrency tests are probabilistic.** T-019 can pass by luck on a fast machine; it asserts an
-  invariant (revision count == successful writes) rather than timing, which reduces but doesn't
-  eliminate the blind spot.
+  invariant (the revision count grows monotonically under concurrent writes — BookStack may merge
+  same-user edits, so not strict equality) rather than timing, which reduces but doesn't eliminate
+  the blind spot.
 - **Health-check semantics.** T-016 proves `/icon.png` is 200 with DB down; it can't prove the ALB
   health check itself is configured to use it (that's TF-012's job — the two together cover OPS-002).
 

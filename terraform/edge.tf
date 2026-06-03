@@ -1,6 +1,11 @@
 locals {
   create_acm        = var.certificate_arn == ""
   manage_validation = local.create_acm && var.route53_zone_id != ""
+
+  # Operator-facing public URL (custom domain if set, else the ALB DNS name). Single source for
+  # the app_url and saml_sp_urls outputs. NB: this is intentionally NOT the running app's APP_URL —
+  # that comes from the SSM app_url param (secrets.tf), whose empty -> "UNSET" semantics differ.
+  public_url = var.domain_name != "" ? "https://${var.domain_name}" : "https://${aws_lb.this.dns_name}"
 }
 
 ############################

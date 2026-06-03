@@ -12,6 +12,7 @@ TPL="${1:-$HERE/../../terraform/user-data.sh.tftpl}"
 perl -pe '
   s/\$\{region\}/us-east-1/g;
   s/\$\{name_prefix\}/ccc-wiki/g;
+  s/\$\{docker_compose_version\}/2.32.4/g;
   s{\$\{efs_id\}}{fs-0123456789abcdef0}g;
   s{\$\{efs_ap_id\}}{fsap-0123456789abcdef0}g;
   s{\$\{app_key_arn\}}{arn:aws:secretsmanager:us-east-1:123456789012:secret:ccc-wiki/app-key}g;

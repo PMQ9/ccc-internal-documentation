@@ -115,7 +115,12 @@ resource "aws_cloudwatch_metric_alarm" "disk_high" {
   threshold           = 80
   alarm_description   = "Root disk > 80% — BookStack disk-full is a classic outage cause."
   alarm_actions       = local.alarm_actions
-  treat_missing_data  = "notBreaching"
+  # notBreaching (not breaching) is deliberate here: this is a CloudWatch-agent custom metric keyed
+  # on the dynamic InstanceId, so every ASG instance refresh has a startup gap where the SEARCH
+  # matches no series. Breaching would false-alarm on each refresh. Disk-full is backstopped by the
+  # breaching alb_unhealthy / alb_5xx alarms, which fire on the user-visible symptom. (Unlike the
+  # RDS/ALB alarms, this metric is not AWS-managed-continuous, so the comparison isn't apples-to-apples.)
+  treat_missing_data = "notBreaching"
 
   metric_query {
     id          = "disk"

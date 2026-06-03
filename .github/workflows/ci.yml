@@ -72,6 +72,7 @@ jobs:
           docker run --rm -v "$PWD":/work -w /work koalaman/shellcheck:v0.10.0 \
             --shell=bash --severity=warning \
             deploy/local/verify.sh tests/lib/common.sh tests/lib/render_user_data.sh \
+            tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh \
             tests/integration/run.sh tests/integration/helpers/load.bash user_data.rendered.sh
       - name: docker compose config validates
         run: |
@@ -83,12 +84,8 @@ jobs:
         run: ./tests/lib/check_user_data_contract.sh
       - name: actionlint (CI lints itself)
         run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.12 -color
-      - name: no floating ':latest' in committed prod config
-        run: |
-          # Exclude comment lines (e.g. the documented appkey-gen command uses :latest).
-          m=$(grep -hE ':latest' deploy/local/.env.example terraform/variables.tf | grep -vE '^[[:space:]]*#' || true)
-          if [ -n "$m" ]; then echo "::error::floating :latest pin in committed config: $m"; exit 1; fi
-          echo "no :latest pins OK"
+      - name: pins don't float + Makefile tool pins match CI (single source of truth)
+        run: ./tests/lib/check_pins.sh
 
   secrets:
     name: secrets · gitleaks

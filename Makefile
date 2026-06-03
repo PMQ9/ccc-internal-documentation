@@ -61,7 +61,8 @@ shellcheck: ## shellcheck all shell + the rendered user-data template
 	$(DKR) -v /tmp/_user_data.rendered.sh:/work/_user_data.rendered.sh $(SHELLCHECK_IMG) \
 	  --shell=bash --severity=warning \
 	  deploy/local/verify.sh tests/lib/common.sh tests/integration/run.sh \
-	  tests/integration/helpers/load.bash tests/lib/render_user_data.sh _user_data.rendered.sh
+	  tests/integration/helpers/load.bash tests/lib/render_user_data.sh \
+	  tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh _user_data.rendered.sh
 
 .PHONY: compose-config
 compose-config: ## validate deploy/local/compose.yaml renders
@@ -82,10 +83,8 @@ links: ## broken-link check over docs (offline: local files only)
 	$(DKR) $(LYCHEE_IMG) --offline --no-progress --exclude-path .github '**/*.md'
 
 .PHONY: pins
-pins: ## assert no floating :latest in committed prod config (comments excluded)
-	@m=$$(grep -hE ':latest' deploy/local/.env.example terraform/variables.tf | grep -vE '^[[:space:]]*#' || true); \
-	  if [ -n "$$m" ]; then echo "floating :latest pin: $$m"; exit 1; fi; \
-	  echo "no :latest pins OK"
+pins: ## assert pins don't float + Makefile tool pins == CI pins (single source of truth)
+	./tests/lib/check_pins.sh
 
 .PHONY: user-data-contract
 user-data-contract: ## assert rendered user-data fetches secrets (bakes none)

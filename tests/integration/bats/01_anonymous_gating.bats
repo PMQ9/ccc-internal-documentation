@@ -5,6 +5,15 @@
 # open public *write* (T-002).
 load "../helpers/load"
 
+teardown_file() {
+  # Safety net for T-002, which flips the global 'app-public' setting ON. If an assertion in it
+  # hard-fails (or a --keep run is interrupted) an inline restore would be skipped, leaving the
+  # stack in public-read mode and making T-001 spuriously fail on the next run. teardown_file runs
+  # once after every test in this file regardless of pass/fail, so restore the default OFF here.
+  dbq "UPDATE settings SET value='false', updated_at=NOW() WHERE setting_key='app-public';" || true
+  dc exec -T bookstack sh -lc 'cd /app/www 2>/dev/null && php artisan cache:clear >/dev/null 2>&1 || true'
+}
+
 @test "T-001 anonymous GET / redirects to login (public viewing off)" {
   run http_status /
   assert_status 302 "$output" "anon home should 302 to /login when public viewing is off"
@@ -38,8 +47,5 @@ load "../helpers/load"
 
   run http_status /settings/users
   assert_status_in "302 403" "$output" "public viewing must NOT let anon reach admin user management (not 200)"
-
-  # Restore default (public off) so later tests see the documented default posture.
-  dbq "UPDATE settings SET value='false', updated_at=NOW() WHERE setting_key='app-public';" || true
-  dc exec -T bookstack sh -lc 'cd /app/www 2>/dev/null && php artisan cache:clear >/dev/null 2>&1 || true'
+  # The default (public off) is restored in teardown_file, so it runs even if an assertion above fails.
 }

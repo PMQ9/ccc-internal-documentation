@@ -52,9 +52,6 @@ api_status() { req_status "$ADMIN_TOKEN" "$1" "$2" "${3:-}"; }
 # Extract a top-level/path JSON value (jq is present on ubuntu-latest and macOS dev boxes).
 json() { jq -r "$1"; }
 
-# Pull the first numeric "id" out of a BookStack create response.
-first_id() { grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2; }
-
 # ---- Readiness: poll, never sleep-and-pray --------------------------------
 wait_for_http() { # wait_for_http PATH EXPECTED_CODE TIMEOUT_SECONDS
   local path="$1" want="${2:-200}" timeout="${3:-240}" code
