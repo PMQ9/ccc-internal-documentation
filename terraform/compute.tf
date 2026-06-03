@@ -38,21 +38,22 @@ resource "aws_launch_template" "this" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh.tftpl", {
-    region            = var.region
-    name_prefix       = var.name_prefix
-    efs_id            = aws_efs_file_system.this.id
-    efs_ap_id         = aws_efs_access_point.config.id
-    app_key_arn       = aws_secretsmanager_secret.app_key.arn
-    db_secret_arn     = aws_db_instance.this.master_user_secret[0].secret_arn
-    saml_idp_x509_arn = aws_secretsmanager_secret.saml["idp_x509"].arn
-    timezone          = var.app_timezone
-    alb_proxy_cidrs   = join(",", local.public_subnet_cidrs)
-    rds_address       = aws_db_instance.this.address
-    db_name           = var.db_name
-    db_username       = var.db_username
-    bookstack_image   = var.bookstack_image
-    log_group         = aws_cloudwatch_log_group.app.name
-    cw_namespace      = "${var.name_prefix}/host"
+    region                 = var.region
+    name_prefix            = var.name_prefix
+    docker_compose_version = var.docker_compose_version
+    efs_id                 = aws_efs_file_system.this.id
+    efs_ap_id              = aws_efs_access_point.config.id
+    app_key_arn            = aws_secretsmanager_secret.app_key.arn
+    db_secret_arn          = aws_db_instance.this.master_user_secret[0].secret_arn
+    saml_idp_x509_arn      = aws_secretsmanager_secret.saml["idp_x509"].arn
+    timezone               = var.app_timezone
+    alb_proxy_cidrs        = join(",", local.public_subnet_cidrs)
+    rds_address            = aws_db_instance.this.address
+    db_name                = var.db_name
+    db_username            = var.db_username
+    bookstack_image        = var.bookstack_image
+    log_group              = aws_cloudwatch_log_group.app.name
+    cw_namespace           = "${var.name_prefix}/host"
   }))
 
   tag_specifications {

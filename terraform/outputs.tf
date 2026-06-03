@@ -10,7 +10,7 @@ output "alb_zone_id" {
 
 output "app_url" {
   description = "The URL the wiki is served at (custom domain if set, else the ALB DNS name)."
-  value       = var.domain_name == "" ? "https://${aws_lb.this.dns_name}" : "https://${var.domain_name}"
+  value       = local.public_url
 }
 
 output "rds_endpoint" {
@@ -52,9 +52,9 @@ output "acm_dns_validation_records" {
 output "saml_sp_urls" {
   description = "Service Provider URLs for VUIT to register the SAML SP."
   value = {
-    entity_id = "${var.domain_name == "" ? "https://${aws_lb.this.dns_name}" : "https://${var.domain_name}"}/saml2/metadata"
-    acs       = "${var.domain_name == "" ? "https://${aws_lb.this.dns_name}" : "https://${var.domain_name}"}/saml2/acs"
-    sls       = "${var.domain_name == "" ? "https://${aws_lb.this.dns_name}" : "https://${var.domain_name}"}/saml2/sls"
+    entity_id = "${local.public_url}/saml2/metadata"
+    acs       = "${local.public_url}/saml2/acs"
+    sls       = "${local.public_url}/saml2/sls"
   }
 }
 

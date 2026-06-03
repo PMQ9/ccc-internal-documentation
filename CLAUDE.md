@@ -80,9 +80,13 @@ Flat root module, **one file per concern**: `network.tf` `compute.tf` `data.tf` 
 
 ## Conventions and gotchas
 
-- **No floating `:latest` in committed prod config** — enforced by `make pins` (CI fails on it).
-  Pin BookStack/MariaDB tags and tool images to a tested version. The validated pins live in
-  `tests/integration/run.sh` (`BOOKSTACK_TAG`, `MARIADB_TAG`).
+- **No floating `:latest` in committed prod config** — enforced by `make pins`
+  (`tests/lib/check_pins.sh`), which also asserts the Makefile tool pins match the workflow pins (so
+  local `make` and CI run identical versions) and forbids a floating `releases/latest` in the EC2
+  bootstrap. The **canonical** BookStack/MariaDB pin is `tests/integration/run.sh` (`BOOKSTACK_TAG`,
+  `MARIADB_TAG`); it is **deliberately mirrored** in `deploy/local/.env.example` (local stack),
+  `terraform/variables.tf` (prod default), `tests/lib/render_user_data.sh` (shellcheck fixture), and
+  `.github/workflows/weekly.yml` (CVE scan) — bump them in lockstep (see the upgrade runbook).
 - **BookStack v26.05 schema**: no `books`/`pages` tables — entities live in a unified `entities` +
   `entity_page_data` schema. Backup/restore is whole-DB so it's transparent, but **don't write
   ad-hoc queries against `books`/`pages`.** `page_revisions`, `attachments`, `images`, `users`,
@@ -97,6 +101,42 @@ Flat root module, **one file per concern**: `network.tf` `compute.tf` `data.tf` 
   role, SAML2 break-glass via `AUTH_AUTO_INITIATE=false`, group→role sync OFF at launch) is detailed
   in [docs/architecture.md](docs/architecture.md#bookstack-configuration-the-load-bearing-bits) — read
   it before touching auth.
+
+## Engineering conventions
+
+How this repo stays changeable. These describe how it already works — follow them so changes land
+without introducing drift. The bias is **subtraction**: fewer moving parts, enforced by gates.
+
+- **Extend the existing seam; don't add one.** A new AWS resource goes in the existing
+  one-file-per-concern `.tf` (`network`/`compute`/`data`/`edge`/`iam`/`secrets`/`observability`) —
+  the root module stays flat; no submodules for a single deployment. A new behavioral check goes in a
+  numbered `tests/integration/bats/NN_*.bats`; a new shared shell helper goes in `tests/lib/common.sh`
+  or `helpers/load.bash`, never copy-pasted into a test. A new gate is a `.PHONY` Makefile target
+  added to the `check` aggregate and mirrored in CI.
+- **Terraform naming + DRY.** Singletons are `aws_<type>.this`; multi-instance resources get
+  descriptive names. **Every resource name derives from `var.name_prefix`** (default `ccc-wiki`) —
+  never hardcode a name. (Runbooks use literal `ccc-wiki-*` names for copy-paste; if you override
+  `name_prefix`, substitute and confirm from `terraform output` before destructive commands.) Lift
+  repeated expressions into a `locals` block (see `network.tf`, `edge.tf`); comments state the
+  *why*/trade-off, not the obvious what.
+- **Shell.** `#!/usr/bin/env bash` + strict mode (`set -uo pipefail`; helpers stay option-safe so a
+  non-2xx HTTP code is data, not a fatal error). All shell is shellcheck-clean at `--severity=warning`
+  (`make shellcheck`, including the rendered user-data). Reuse `tests/lib/common.sh` (`dc`, `dbq`,
+  `http_status`, `wait_for_*`); poll a real condition, never `sleep N` and hope.
+- **Test isolation is non-negotiable.** The runner stands up its own compose project on port `8089`
+  with its own volumes and tears it down on exit — it never touches a running local stack. Anything
+  you add preserves that: no fixed container names, no host-port collisions, clean teardown.
+- **Fitness functions over prose that rots.** When you make a decision that must stay true — a
+  security posture, a pinned version, a contract — encode it as a gate (a Makefile target, a
+  `terraform test` assertion, `tests/lib/check_pins.sh`, `check_user_data_contract.sh`), not just a
+  sentence here. A machine-enforced rule won't silently drift. The pin-lockstep and
+  scanner-suppression-with-justification rules are detailed in
+  [docs/runbooks/ci-cd-pipeline.md](docs/runbooks/ci-cd-pipeline.md).
+- **Favor subtraction; rule of three.** Don't extract a module/helper/variable for the second
+  occurrence unless it clearly pays off (this repo deliberately hand-rolls ~5 bats assertions rather
+  than vendoring bats-support). Prefer deleting a layer to adding one; don't churn clean code to a
+  style preference. A change that adds an abstraction should say, in the PR, what it buys and what it
+  costs.
 
 ## Where docs live
 

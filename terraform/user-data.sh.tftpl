@@ -10,10 +10,15 @@ NAME="${name_prefix}"
 # Packages: docker + compose plugin + EFS utils + jq + cloudwatch agent
 ############################
 dnf install -y docker amazon-efs-utils jq amazon-cloudwatch-agent
+# docker-compose plugin: pinned version (reproducible across instance refreshes) + sha256 verified
+# against the release's published checksum (no unverified releases/latest fetch).
 mkdir -p /usr/local/lib/docker/cli-plugins
-curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" \
-  -o /usr/local/lib/docker/cli-plugins/docker-compose
-chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+COMPOSE_BIN=/usr/local/lib/docker/cli-plugins/docker-compose
+COMPOSE_URL="https://github.com/docker/compose/releases/download/v${docker_compose_version}/docker-compose-linux-$(uname -m)"
+curl -fsSL "$COMPOSE_URL" -o "$COMPOSE_BIN"
+curl -fsSL "$COMPOSE_URL.sha256" -o /tmp/docker-compose.sha256
+echo "$(awk '{print $1}' /tmp/docker-compose.sha256)  $COMPOSE_BIN" | sha256sum -c -
+chmod +x "$COMPOSE_BIN"
 systemctl enable --now docker
 
 ############################

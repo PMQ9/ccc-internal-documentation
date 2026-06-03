@@ -21,15 +21,23 @@ migration event.** Treat it with care.
      --db-snapshot-identifier ccc-wiki-pre-<oldver>-$(date +%Y%m%d)
    ```
    Also confirm a recent AWS Backup recovery point exists for EFS.
-3. **Bump the pin**: set `bookstack_image` to the new tag in `terraform.tfvars`; `terraform apply`
-   (updates the launch template).
+3. **Bump the pin in lockstep.** The validated BookStack/MariaDB pin is mirrored across files that
+   each serve a different layer; a bump touches all of them (the canonical pin is `run.sh`):
+   - `tests/integration/run.sh` — canonical validated `BOOKSTACK_TAG` / `MARIADB_TAG`
+   - `terraform/variables.tf` (`bookstack_image`) — prod default, set the new value via `terraform.tfvars`
+   - `tests/lib/render_user_data.sh` — shellcheck render fixture (`make pins` enforces this == `variables.tf`)
+   - `deploy/local/.env.example` — local-stack default
+   - `.github/workflows/weekly.yml` — the CVE-scan target list
+
+   Then `terraform apply` (updates the launch template).
 4. **Roll the instance** so user-data pulls the new image and the container runs new migrations:
    ```bash
    aws autoscaling start-instance-refresh --auto-scaling-group-name ccc-wiki-asg
    ```
 5. **Watch**: instance boot log (`/var/log/bootstrap.log` via SSM Session Manager), then
    `docker logs ccc-wiki-app` for `Running migrations … DONE`. Confirm `GET /status` = 200 and a
-   page renders.
+   page renders. (`/status` is a deliberately **DB-backed** check here — unlike the ALB's DB-free
+   `/icon.png` health check — precisely because you want to confirm PHP+DB recovered post-migration.)
 6. **Verify** a page edit creates a revision and media still loads.
 
 ## Rollback

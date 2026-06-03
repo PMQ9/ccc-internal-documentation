@@ -66,7 +66,7 @@ connor-server (BookStack `v26.05-ls265`, MariaDB `11.4.12-r0-ls220`).
 | V3 | Viewer role | **Viewer is a built-in role in v26.05** (roles seeded: Admin, Editor, Viewer, Public) — confirm it's view-only and set it as Settings → Registration → **Default Registration Role** so auto-registered SSO users land here, not as editors. A Viewer sees no edit buttons; hitting an edit URL → `403`. | ☐ |
 | V4 | Editor role | Editor can create/edit pages; `/settings` → `403`. | ☐ |
 | V5 | Admin role | Admin reaches `/settings` and user/role management. | ☐ |
-| V6 | Media on the persistent volume | Upload an image + attach a file to a page. Confirm they land in the volume: `docker compose exec bookstack ls -R /config/www/files /config/www/images`. | ☐ |
+| V6 | Media on the persistent volume | Upload an image + attach a file to a page. Confirm they land in the volume: `docker compose exec bookstack ls -R /config/www/files /config/www/uploads/images`. | ☐ |
 | V7 | Media survives restart | `docker compose down` (NO `-v`) then `docker compose up -d` → page, image, attachment all still present. | ☐ |
 | V8 | Volume is the durability boundary | (Destructive, last) `docker compose down -v` → data gone, proving the named volumes hold all state. | ☐ |
 | V9 | Revision history + diff + restore | Edit a page twice → page history shows ≥2 revisions; open a diff (changes highlighted); **one-click restore** an older revision → content reverts and a new revision is recorded. | ☐ |

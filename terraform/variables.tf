@@ -43,6 +43,13 @@ variable "vpn_ingress_cidrs" {
   EOT
   type        = list(string)
   default     = []
+
+  # The access control hinges on this list; reject a malformed CIDR at plan time rather than
+  # discovering it at apply against real AWS. Empty list passes (fails closed, by design).
+  validation {
+    condition     = alltrue([for c in var.vpn_ingress_cidrs : can(cidrhost(c, 0))])
+    error_message = "Every vpn_ingress_cidrs entry must be a valid IPv4/IPv6 CIDR (e.g. 129.59.0.0/16)."
+  }
 }
 
 ############################
@@ -61,6 +68,11 @@ variable "certificate_arn" {
   EOT
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.certificate_arn == "" || can(regex("^arn:aws:acm:", var.certificate_arn))
+    error_message = "certificate_arn must be empty (request a new ACM cert) or an arn:aws:acm:... ARN."
+  }
 }
 
 variable "route53_zone_id" {
@@ -86,6 +98,17 @@ variable "bookstack_image" {
   description = "Pinned BookStack image (validated locally on connor-server)."
   type        = string
   default     = "lscr.io/linuxserver/bookstack:v26.05-ls265"
+}
+
+variable "docker_compose_version" {
+  description = <<-EOT
+    Pinned docker-compose plugin version installed at boot (no leading 'v'). The bootstrap
+    verifies the downloaded binary against the release's published sha256. Pinning keeps instance
+    refreshes reproducible (vs the old releases/latest fetch). Confirm against
+    https://github.com/docker/compose/releases before apply, like the other version pins.
+  EOT
+  type        = string
+  default     = "2.32.4"
 }
 
 variable "root_volume_gb" {

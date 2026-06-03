@@ -12,6 +12,9 @@ cd "$(dirname "$0")"
 APPW="$(grep '^DB_PASSWORD' .env | cut -d= -f2-)"
 
 dbq(){ docker compose exec -T db mariadb -h 127.0.0.1 -u bookstack -p"$APPW" bookstackapp -N -B -e "$1"; }
+# Pull the first numeric "id" out of a BookStack create response (jq-free so this stays
+# self-contained on connor-server; do NOT source tests/lib here — verify.sh ships with deploy/local).
+first_id(){ grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2; }
 pass(){ echo "  PASS: $1"; }
 fail(){ echo "  FAIL: $1"; FAILED=1; }
 FAILED=0
@@ -34,11 +37,9 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -H "$AUTH" "$B/api/books")
 
 echo "=== 3. Create content + edit -> revision history ==="
 BOOK_ID=$(curl -s -H "$AUTH" -H 'Content-Type: application/json' \
-  -d '{"name":"Verify Book","description":"created by verify.sh"}' "$B/api/books" \
-  | grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2)
+  -d '{"name":"Verify Book","description":"created by verify.sh"}' "$B/api/books" | first_id)
 PAGE_ID=$(curl -s -H "$AUTH" -H 'Content-Type: application/json' \
-  -d "{\"book_id\":$BOOK_ID,\"name\":\"Verify Page\",\"markdown\":\"# v1\\nfirst version\"}" "$B/api/pages" \
-  | grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2)
+  -d "{\"book_id\":$BOOK_ID,\"name\":\"Verify Page\",\"markdown\":\"# v1\\nfirst version\"}" "$B/api/pages" | first_id)
 echo "  created book=$BOOK_ID page=$PAGE_ID"
 curl -s -o /dev/null -X PUT -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"markdown":"# v2\nsecond version, edited"}' "$B/api/pages/$PAGE_ID"
