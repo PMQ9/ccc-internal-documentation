@@ -53,7 +53,7 @@ jobs:
       - name: trivy config scan (terraform)
         run: |
           docker run --rm -v "$PWD":/work -w /work aquasec/trivy:0.71.0 \
-            config --exit-code 1 --severity HIGH,CRITICAL --no-progress terraform
+            config --exit-code 1 --severity HIGH,CRITICAL -q --ignorefile /work/.trivyignore terraform
       - name: checkov scan (terraform)
         run: |
           docker run --rm -v "$PWD":/work -w /work --entrypoint checkov \

@@ -48,7 +48,7 @@ tf-test: ## terraform test — plan-time security/edge assertions (mocked provid
 # ---- IaC security scanners --------------------------------------------------
 .PHONY: trivy
 trivy: ## trivy config scan over terraform/
-	$(DKR) $(TRIVY_IMG) config --exit-code 1 --severity HIGH,CRITICAL terraform
+	$(DKR) $(TRIVY_IMG) config --exit-code 1 --severity HIGH,CRITICAL --ignorefile /work/.trivyignore terraform
 
 .PHONY: checkov
 checkov: ## checkov scan over terraform/

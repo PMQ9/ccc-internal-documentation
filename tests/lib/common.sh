@@ -80,6 +80,44 @@ wait_for_db_healthy() { # wait_for_db_healthy TIMEOUT
   return 1
 }
 
+# DB-BACKED readiness. /login is served by nginx before BookStack finishes
+# (re)connecting to MySQL on a slow host, so after any (re)start poll a real
+# DB-backed API call — not just /login — before asserting on content.
+wait_for_api() { # wait_for_api TIMEOUT
+  local timeout="${1:-120}" code
+  local deadline=$((SECONDS + timeout))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    code=$(api_status GET /api/books || echo 000)
+    [ "$code" = "200" ] && return 0
+    sleep 3
+  done
+  echo "wait_for_api: /api/books never 200 within ${timeout}s (last=$code)" >&2
+  return 1
+}
+
+# Poll an admin API call until it returns WANT (handles transient busy/race).
+poll_status() { # poll_status WANT TIMEOUT METHOD PATH
+  local want="$1" timeout="$2" method="$3" path="$4" code
+  local deadline=$((SECONDS + timeout))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    code=$(api_status "$method" "$path")
+    [ "$code" = "$want" ] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+# Poll an admin API response body until it contains NEEDLE.
+poll_contains() { # poll_contains TIMEOUT NEEDLE METHOD PATH
+  local timeout="$1" needle="$2" method="$3" path="$4"
+  local deadline=$((SECONDS + timeout))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    api "$method" "$path" | grep -q "$needle" && return 0
+    sleep 2
+  done
+  return 1
+}
+
 # ---- Session login (CSRF dance) for true UI-surface RBAC checks -------------
 # Logs in via the local /login form, persisting cookies to JAR. Echoes the POST
 # status (302 == success). Use the JAR with `curl -b "$JAR"` afterwards.

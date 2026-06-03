@@ -203,7 +203,9 @@ if [ "$STRESS" = "1" ] && { [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; };
   else
     ko "revision chain did not advance under concurrent edits ($BEFORE -> $AFTER)"
   fi
-  if [ "$(api_status GET "/api/pages/$PID")" = "200" ]; then
+  # Poll: right after a burst of concurrent writes the DB can be briefly busy on a
+  # small runner — the page is there, so poll rather than single-shot.
+  if poll_status 200 30 GET "/api/pages/$PID"; then
     ok "page still readable after concurrent edits"
   else
     ko "page unreadable after concurrent edits"
@@ -240,13 +242,20 @@ if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
   dc up -d >/dev/null 2>&1
   wait_for_db_healthy 180 || ko "db unhealthy after restart"
   wait_for_http /login 200 240 || ko "app did not return after restart"
+  wait_for_api 120 || ko "API not DB-ready after restart"   # nginx serves /login before MySQL reconnects
 
-  if api GET "/api/pages/$PP" | grep -q "persist-marker-PERSIST"; then
+  if poll_contains 60 "persist-marker-PERSIST" GET "/api/pages/$PP"; then
     ok "page content survived down/up"
   else
     ko "page content LOST across down/up"
   fi
-  if [ -n "$ATT_BASE" ] && [ -n "$(dc exec -T bookstack sh -lc "find /config -type f -name '$ATT_BASE' 2>/dev/null | head -1")" ]; then
+  ATT_OK=""
+  ATT_DEADLINE=$((SECONDS + 60))
+  while [ "$SECONDS" -lt "$ATT_DEADLINE" ]; do
+    [ -n "$ATT_BASE" ] && [ -n "$(dc exec -T bookstack sh -lc "find /config -type f -name '$ATT_BASE' 2>/dev/null | head -1")" ] && { ATT_OK=1; break; }
+    sleep 2
+  done
+  if [ -n "$ATT_OK" ]; then
     ok "attachment survived down/up on the persistent volume"
   else
     ko "attachment LOST across down/up"
@@ -283,9 +292,10 @@ if [ "$PROFILE" = "full" ]; then
     || echo "  WARN: media restore reported issues"
   dc start bookstack >/dev/null 2>&1
   wait_for_http /login 200 240 || ko "app did not return after restore"
+  wait_for_api 120 || ko "API not DB-ready after restore"
 
   # The dump restored our admin token too, so ADMIN_TOKEN authenticates again.
-  if api GET "/api/pages/$FP" | grep -q "dr-marker-RESTORE"; then
+  if poll_contains 60 "dr-marker-RESTORE" GET "/api/pages/$FP"; then
     ok "page content returned after restore"
   else
     ko "page content MISSING after restore"
