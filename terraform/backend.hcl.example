@@ -1,0 +1,6 @@
+# Copy to backend.hcl and fill in, then: terraform init -backend-config=backend.hcl
+bucket       = "ccc-wiki-tfstate-REPLACE"   # pre-created out of band (see backend.tf)
+key          = "ccc-wiki/prod/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

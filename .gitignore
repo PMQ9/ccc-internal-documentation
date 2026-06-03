@@ -1,0 +1,31 @@
+# Secrets / local config — never commit
+.env
+*.env
+!*.env.example
+deploy/local/.env
+
+# Backups / dumps
+*.sql
+*.tgz
+*.tar.gz
+backup-*
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+!backend.hcl.example
+crash.log
+crash.*.log
+# NOTE: .terraform.lock.hcl IS committed (pins provider versions/hashes) — do not ignore it.
+
+# Claude Code harness cruft
+.claude/scheduled_tasks.lock
+.claude/*.lock
+
+# OS / editor
+.DS_Store
+*.swp

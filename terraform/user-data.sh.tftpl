@@ -1,0 +1,126 @@
+#!/bin/bash
+# BookStack bootstrap (Amazon Linux 2023, arm64). Idempotent enough to re-run on instance refresh.
+set -euxo pipefail
+exec > >(tee /var/log/bootstrap.log) 2>&1
+
+REGION="${region}"
+NAME="${name_prefix}"
+
+############################
+# Packages: docker + compose plugin + EFS utils + jq + cloudwatch agent
+############################
+dnf install -y docker amazon-efs-utils jq amazon-cloudwatch-agent
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+systemctl enable --now docker
+
+############################
+# Mount EFS (access point + TLS); media/config persists across instance replacement
+############################
+mkdir -p /srv/bookstack/config
+if ! grep -q "${efs_id}" /etc/fstab; then
+  echo "${efs_id} /srv/bookstack/config efs _netdev,tls,accesspoint=${efs_ap_id} 0 0" >> /etc/fstab
+fi
+mount -a -t efs
+
+############################
+# Fetch secrets + config (instance-role creds; nothing sensitive baked into the launch template)
+############################
+get_secret() { aws secretsmanager get-secret-value --secret-id "$1" --query SecretString --output text --region "$REGION"; }
+get_param()  { aws ssm get-parameter --name "$1" --query Parameter.Value --output text --region "$REGION"; }
+
+APP_KEY="$(get_secret "${app_key_arn}")"
+DB_PASS="$(get_secret "${db_secret_arn}" | jq -r .password)"
+APP_URL="$(get_param /$NAME/app_url)"
+AUTH_METHOD="$(get_param /$NAME/auth_method)"
+SAML_IDP_ENTITYID="$(get_param /$NAME/saml_idp_entityid)"
+SAML_IDP_SSO="$(get_param /$NAME/saml_idp_sso)"
+SAML_IDP_SLO="$(get_param /$NAME/saml_idp_slo)"
+SAML_EMAIL_ATTR="$(get_param /$NAME/saml_email_attribute)"
+SAML_NAME_ATTRS="$(get_param /$NAME/saml_display_name_attributes)"
+SAML_EXTID_ATTR="$(get_param /$NAME/saml_external_id_attribute)"
+SAML_USER_TO_GROUPS="$(get_param /$NAME/saml_user_to_groups)"
+SAML_GROUP_ATTR="$(get_param /$NAME/saml_group_attribute)"
+SAML_IDP_X509="$(get_secret "${saml_idp_x509_arn}")"
+
+############################
+# Write .env + compose (BookStack only; DB=RDS, media=EFS)
+############################
+mkdir -p /srv/bookstack
+umask 077
+cat > /srv/bookstack/.env <<EOF
+PUID=1000
+PGID=1000
+TZ=${timezone}
+APP_URL=$APP_URL
+APP_KEY=$APP_KEY
+APP_DEBUG=false
+QUEUE_CONNECTION=database
+# Trust the ALB so X-Forwarded-Proto/For are honored (https links, correct client IP in logs).
+APP_PROXIES=${alb_proxy_cidrs}
+DB_HOST=${rds_address}
+DB_PORT=3306
+DB_DATABASE=${db_name}
+DB_USERNAME=${db_username}
+DB_PASSWORD=$DB_PASS
+REVISION_LIMIT=false
+# Auth: standard at launch; SAML2 once auth_method flips and SAML params/secret are populated.
+AUTH_METHOD=$AUTH_METHOD
+AUTH_AUTO_INITIATE=false
+SAML2_NAME=Vanderbilt SSO
+SAML2_IDP_ENTITYID=$SAML_IDP_ENTITYID
+SAML2_IDP_SSO=$SAML_IDP_SSO
+SAML2_IDP_SLO=$SAML_IDP_SLO
+SAML2_IDP_x509=$SAML_IDP_X509
+SAML2_AUTOLOAD_METADATA=false
+SAML2_EMAIL_ATTRIBUTE=$SAML_EMAIL_ATTR
+SAML2_DISPLAY_NAME_ATTRIBUTES=$SAML_NAME_ATTRS
+SAML2_EXTERNAL_ID_ATTRIBUTE=$SAML_EXTID_ATTR
+SAML2_USER_TO_GROUPS=$SAML_USER_TO_GROUPS
+SAML2_GROUP_ATTRIBUTE=$SAML_GROUP_ATTR
+SAML2_REMOVE_FROM_GROUPS=false
+EOF
+
+cat > /srv/bookstack/compose.yaml <<'YAML'
+name: ccc-wiki
+services:
+  bookstack:
+    image: ${bookstack_image}
+    container_name: ccc-wiki-app
+    env_file: .env
+    volumes:
+      - /srv/bookstack/config:/config
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: "${region}"
+        awslogs-group: "${log_group}"
+        awslogs-stream: "bookstack"
+YAML
+
+cd /srv/bookstack && docker compose up -d
+
+############################
+# CloudWatch agent: memory + disk (not emitted by default) for the burstable instance
+############################
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWJSON'
+{
+  "metrics": {
+    "namespace": "${cw_namespace}",
+    "append_dimensions": { "InstanceId": "$${aws:InstanceId}" },
+    "metrics_collected": {
+      "mem": { "measurement": [ "mem_used_percent" ] },
+      "disk": { "measurement": [ "disk_used_percent" ], "resources": [ "/" ] }
+    }
+  }
+}
+CWJSON
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+echo "bootstrap complete"
