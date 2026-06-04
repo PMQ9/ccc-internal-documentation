@@ -1,0 +1,72 @@
+{
+  // BookStack local-dev lifecycle. Run via: Terminal → Run Task… , or the Command
+  // Palette → "Tasks: Run Task". "Deploy (local)" is the default build task, so
+  // Ctrl/Cmd+Shift+B deploys with one keystroke. All compose tasks run in
+  // deploy/local (where compose.yaml + the gitignored .env live).
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "BookStack: Deploy (local)",
+      "type": "shell",
+      "command": "./dev-up.sh",
+      "options": { "cwd": "${workspaceFolder}/deploy/local" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "detail": "Up BookStack + MariaDB, wait until it serves, open http://localhost:8080"
+    },
+    {
+      "label": "BookStack: Fresh deploy (wipe data)",
+      "type": "shell",
+      "command": "./dev-up.sh --fresh",
+      "options": { "cwd": "${workspaceFolder}/deploy/local" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "detail": "down -v (delete all wiki data) then a clean from-scratch deploy"
+    },
+    {
+      "label": "BookStack: Logs (follow)",
+      "type": "shell",
+      "command": "docker compose logs -f bookstack",
+      "options": { "cwd": "${workspaceFolder}/deploy/local" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "detail": "Tail the BookStack container logs"
+    },
+    {
+      "label": "BookStack: Stop (keep data)",
+      "type": "shell",
+      "command": "docker compose stop",
+      "options": { "cwd": "${workspaceFolder}/deploy/local" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "detail": "Stop the containers; named volumes (data) are preserved"
+    },
+    {
+      "label": "BookStack: Down (remove containers, keep data)",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": { "cwd": "${workspaceFolder}/deploy/local" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "detail": "Remove containers + network; named volumes (data) are preserved"
+    },
+    {
+      "label": "BookStack: Clean (down -v, DELETE all data)",
+      "type": "shell",
+      "command": "docker compose down -v",
+      "options": { "cwd": "${workspaceFolder}/deploy/local" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "detail": "Remove containers AND volumes — wipes the DB + all uploaded media"
+    },
+    {
+      "label": "BookStack: Open in browser",
+      "type": "shell",
+      "command": "open http://localhost:8080",
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "detail": "Open the local wiki in your default browser"
+    }
+  ]
+}

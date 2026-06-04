@@ -1,0 +1,23 @@
+{
+  // Green ▶ "Run" buttons in the Run and Debug panel (Ctrl/Cmd+Shift+D).
+  // Uses VSCode's built-in `node-terminal` launcher — it just runs the command
+  // in an integrated terminal, so no debugger extension is needed. The script
+  // brings the BookStack stack up, waits until it serves, and opens the browser.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "▶ Deploy BookStack (local)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./dev-up.sh",
+      "cwd": "${workspaceFolder}/deploy/local"
+    },
+    {
+      "name": "▶ Fresh deploy BookStack (wipe data)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./dev-up.sh --fresh",
+      "cwd": "${workspaceFolder}/deploy/local"
+    }
+  ]
+}
