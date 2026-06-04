@@ -22,6 +22,10 @@ crash.log
 crash.*.log
 # NOTE: .terraform.lock.hcl IS committed (pins provider versions/hashes) — do not ignore it.
 
+# Generated test artifacts — `make shellcheck` renders user-data to /tmp; on some
+# Docker setups (macOS file-mount quirk) an empty stub is left in the repo root.
+_user_data.rendered.sh
+
 # Claude Code harness cruft
 .claude/scheduled_tasks.lock
 .claude/*.lock
