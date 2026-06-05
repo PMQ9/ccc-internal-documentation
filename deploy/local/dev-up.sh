@@ -97,6 +97,15 @@ fi
 echo "==> BookStack is up: ${app_url}"
 echo "    First login: admin@admin.com / password  (change it immediately)"
 
+# --- 4b. apply the brand/theme (config as code) ------------------------------
+# BookStack keeps the custom head as a DB setting, so syncing the file alone won't change the live
+# theme — apply-head.sh makes it match deploy/branding/ccc-custom-head.html (idempotent: writes only
+# on a real diff). Best-effort: the app is already healthy, so a theme hiccup warns rather than fails
+# the deploy. SKIP_HEAD=1 opts out (e.g. testing bare upstream behavior).
+if [ "${SKIP_HEAD:-0}" != "1" ]; then
+  bash apply-head.sh || echo "::warning::custom-head not applied; live theme unchanged (see above)" >&2
+fi
+
 # --- 5. open a browser (best-effort; suppress with NO_OPEN=1) ----------------
 if [ "${NO_OPEN:-0}" != "1" ]; then
   if command -v open > /dev/null 2>&1; then

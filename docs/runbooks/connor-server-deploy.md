@@ -32,7 +32,14 @@ It runs, in order: SSH preflight → **rsync** the working tree to `connor-serve
 (excluding `.env`/backups/state; only files change, the running stack is untouched) → DB+media
 **snapshot** into `~/ccc-wiki-backups` via `snapshot.sh` (rollback point, taken before any
 bring-up) → remote `PULL=1 NO_OPEN=1 ./dev-up.sh` (pull pinned images, recreate, wait for
-`/icon.png`) → `verify.sh` smoke test → print the LAN URL + `docker ps`.
+`/icon.png`, then **apply the brand theme** via `apply-head.sh` — see below) → `verify.sh` smoke
+test → print the LAN URL + `docker ps`.
+
+The brand theme (`deploy/branding/ccc-custom-head.html`) is BookStack's `app-custom-head` **DB
+setting**, not a file BookStack reads — so the rsync alone never changes the live theme. `dev-up.sh`
+therefore runs `apply-head.sh` after the app is healthy: it writes the file into the setting only
+when it differs (idempotent, cache-safe), making the **file the source of truth** (a custom-head edit
+in the BookStack UI is reverted on the next deploy). `SKIP_HEAD=1 ./dev-up.sh` opts out.
 
 Every step is toggleable per run:
 
@@ -110,6 +117,13 @@ optional — unset falls back to the default — so nothing is hardcoded in the 
   (non-root, already in the `docker` group).
 - **Label-scoped** (`self-hosted,connor-server,ccc-wiki`) so it never collides with the unrelated
   `actions-runner-marcomms-agent-v3` runner on the same box.
+- **The brand theme is executable code, applied on merge.** `apply-head.sh` writes
+  `ccc-custom-head.html` into the live `app-custom-head` setting on every deploy, and that file
+  carries a `<script>` that runs on every page — including the login screen, where it rewrites the
+  password field. BookStack serves it with a valid CSP nonce, so it executes as first-party JS: a
+  merge to `main` ships JavaScript into every user's session. So treat the file as code and protect
+  `main` accordingly — branch protection + required review, ideally a `CODEOWNERS` entry on
+  `deploy/branding/`, so the payload always gets a second reviewer. (Keep push-to-main-only.)
 
 ## Rollback (target: minutes)
 
@@ -139,6 +153,11 @@ optional — unset falls back to the default — so nothing is hardcoded in the 
   `ccc-wiki_bookstack_config` is scoped by `name: ccc-wiki` in
   [compose.yaml](../../deploy/local/compose.yaml); never rename it. Confirm with
   `docker volume ls | grep bookstack_config`.
+- **Kill a bad/hostile theme fast** — the repo file is authoritative, so a custom-head fix made only
+  in the BookStack UI is reverted on the next deploy. To make a kill stick: set
+  `DEPLOY_CONNOR_ENABLED=false` to freeze auto-deploy (for an on-demand deploy, run with
+  `SKIP_HEAD=1`), then fix `ccc-custom-head.html` and redeploy. The prior setting value is in the
+  pre-deploy snapshot if you need to inspect it.
 
 ## Maps forward to AWS
 
