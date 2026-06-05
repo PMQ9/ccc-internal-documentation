@@ -47,6 +47,13 @@ docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SA
   See [terraform/README.md](terraform/README.md) and
   [docs/runbooks/vuit-coordination-checklist.md](docs/runbooks/vuit-coordination-checklist.md).
 
+## Updates
+
+- **What changed, when** — see [CHANGELOG.md](CHANGELOG.md).
+- **Current state** — see the [project status tracker](docs/status.md).
+- **Editing the docs?** Expand an existing doc before adding a new one; keep it short and table-first;
+  no emojis; log notable changes in the changelog. Full policy in [CLAUDE.md](CLAUDE.md#documentation).
+
 ## Quick start (local test)
 
 ```bash
