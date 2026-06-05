@@ -93,6 +93,31 @@ obligation already in force for 2026). Ratios below are computed; **AA needs 4.5
 - **Never rely on color alone.** Links are underlined; states get an icon or label, not just a hue
   (WCAG 1.4.1).
 
+### Dark mode
+
+The wiki follows the visitor's OS light/dark setting. Dark mode is **not a second palette to
+maintain** — it hands the dark surfaces back to BookStack's own (already-AA) dark theme and only
+re-points the **accent text** to the lighter golds that pass on a dark background. The black header
+is intentionally dark in *both* modes. The page background in dark mode is `#111` (BookStack).
+
+| Foreground | Background | Ratio | Verdict |
+|---|---|---|---|
+| Flat Gold `#CFAE70` | Dark page `#111` | **8.9 : 1** | ✅ AA — dark-mode link / accent **text** |
+| Highlight `#ECB748` | Dark page `#111` | **10.3 : 1** | ✅ AA — dark-mode link hover |
+| White `#FFFFFF` | Oak `#946E24` | **4.65 : 1** | ✅ AA — primary button label (**both** modes) |
+| Black `#1C1C1C` | Flat Gold `#CFAE70` | **8.1 : 1** | ✅ AA — text on a gold fill (use **black**, never white) |
+| Oak `#946E24` | Dark page `#111` | **4.06 : 1** | ❌ FAIL (normal text) — why Oak links must **not** carry into dark |
+| White `#FFFFFF` | Flat Gold `#CFAE70` | **2.11 : 1** | ❌ FAIL — why `--color-primary` stays Oak, never a lighter gold |
+
+**The two rules that fall out:** in dark mode, link/accent **text** is Flat Gold (Oak drops to
+4.06 : 1 on `#111`); and the primary color **stays Oak** because BookStack uses it as a *button
+background* with a white label — white on a lighter gold is 2.11 : 1.
+
+> **Known light-mode gap (tracked, not yet fixed):** Oak link text on the **cream** chrome `#F5F3EF`
+> is ~4.20 : 1 and on the `#F2F2F2` page gutter ~4.15 : 1 — both just under AA. The rule above
+> ("use black for links on cream chrome") is the intended resolution; it is not yet implemented for
+> sidebar links. Dark mode is unaffected (Flat Gold). See the branding README validation checklist.
+
 ---
 
 ## 4. Logos & lockups
@@ -187,10 +212,10 @@ maps to a BookStack CSS variable or a stable selector.
 
 | Surface | Decision | Token / mechanism |
 |---|---|---|
-| **Primary color** (buttons, links) | Oak `#946E24` — the only gold that passes AA as text and as a white-label button | Settings → primary color **and** `--color-primary` |
-| **Links in content** | Oak `#946E24`, **always underlined** | `--color-link` + `.page-content a` underline |
-| **Header / top bar** | Vanderbilt-signature **black `#1C1C1C` bar, white text, thin gold accent rule** | `header.header` override |
-| **App chrome / sidebars** | Cream `#F5F3EF` with black text | background overrides |
+| **Primary color** (buttons) | Oak `#946E24` — passes AA as a white-label button in **both** modes | Settings → primary color **and** `--color-primary` (kept Oak in dark) |
+| **Links / accent text** | Oak `#946E24` light, Flat Gold `#CFAE70` dark, **always underlined** in content | `--ccc-link` → `--color-link` + `.page-content a` underline |
+| **Header / top bar** | Vanderbilt-signature **black `#1C1C1C` bar, white text, thin gold accent rule** (both modes) | `.primary-background` override |
+| **App chrome / sidebars** | Cream `#F5F3EF` in light; transparent in dark (BookStack's `#111` shows through) | `--ccc-chrome-surface` |
 | **Body text** | Black `#1C1C1C` on white content | inherited |
 | **Accent / active states** | Highlight `#ECB748` or Flat Gold `#CFAE70` with **black** text | badges, active nav, callouts |
 | **Focus indicator** | Layered ring (gold core + ink halo) visible on white, cream, gold, and the black header | `:focus-visible` |
@@ -202,6 +227,30 @@ maps to a BookStack CSS variable or a stable selector.
 trap (per the frontend playbook, the system stack is "often the right answer"). Headings use a serif
 stack to echo the academic wordmark; body uses a sans-serif system stack. Swapping in a licensed brand
 font later is a one-variable change, documented in the branding README.
+
+### How the theme is structured (so a change can't break a mode)
+
+The CSS in `ccc-custom-head.html` is built as **three token tiers** so that color is *data*, not
+rules scattered across the file. The first version hardcoded a light color onto each surface; when OS
+dark mode arrived, every hardcoded surface clashed. Tiers fix that class of bug at the root:
+
+| Tier | What it is | Example |
+|---|---|---|
+| 1. Palette | Raw brand hexes. Never referenced by a surface directly. | `--ccc-gold-oak: #946E24` |
+| 2. Semantic, **mode-aware** | What a *role* looks like. The **only** place a mode differs. | `--ccc-link`, `--ccc-chrome-surface` |
+| 3. Mapping | Point BookStack's own variables (and our surface rules) at Tier 2. | `--color-link: var(--ccc-link)` |
+
+The rule that makes it scalable: **surface rules reference a Tier-2 token; they never carry a literal
+color and never carry a mode guard.** Light values are defined in `:root`; the `html.dark-mode` block
+re-points *only* the handful of tokens that change. Because `:root` and `html.dark-mode` are the same
+`<html>` element, a mapping like `--color-link: var(--ccc-link)` automatically resolves to the dark
+value in dark mode — defined once, correct in both. To **recolor** a surface, edit its Tier-2 token;
+to **add a mode** (e.g. high-contrast), add one more block that re-points tokens. No surface rule
+changes, so a surface can't be left painting one mode's color into another.
+
+The one deliberate exception is `--color-primary`: it stays raw Oak in both modes because BookStack
+uses it as a *button background* with a white label (white-on-Oak is AA; white on a lighter gold is
+not — see [§3 Dark mode](#dark-mode)).
 
 ---
 

@@ -98,6 +98,21 @@ synced to the user's account. For an internal wiki that's the expected behavior 
 server/CSRF coupling. This is **skipped on Settings → Customization** (BookStack omits custom head
 there), so it never fights the settings editor.
 
+**The color side is token-driven, so a change can't break a mode.** Colors live in three tiers
+(palette -> mode-aware semantic tokens -> BookStack-variable mapping); surface rules reference a token
+and carry **no literal color and no mode guard**. Light values are in `:root`; the `html.dark-mode`
+block re-points *only* the tokens that differ. So:
+
+- **To recolor a surface:** edit its semantic token (e.g. `--ccc-chrome-surface`, `--ccc-link`) in one
+  place. Every surface using it updates; no other rule changes.
+- **To add a mode** (e.g. high-contrast): add one block that re-points the tokens. No surface rule moves.
+- Dark mode **defers to BookStack's own (AA) dark theme** for surfaces (chrome goes transparent over
+  its `#111` page) and only re-points accent **text** to a lighter gold; `--color-primary` stays Oak
+  because BookStack uses it as a white-label button background.
+
+The full tier model and the dark-mode contrast pairings are in
+[the brand guidelines §3 + §7](../../docs/brand/ccc-brand-guidelines.md#dark-mode).
+
 ## Validation checklist (WCAG 2.2 AA)
 
 This is the **themed-deployment accessibility sign-off** the repo already tracks as Phase 3
@@ -123,6 +138,11 @@ repo (BookStack isn't running in CI), so it's a manual gate against the live ins
 - [ ] **Light/dark.** With OS set to dark, a fresh browser (no stored choice) loads dark with no
       light-then-dark flash; set OS to light and it follows. Toggle once — the choice sticks across
       reloads and the toggle label matches the screen (no "Dark Mode" label on an already-dark page).
+- [ ] **Dark-mode contrast + no clash.** In dark mode the sidebars/panels are **dark** (not cream),
+      links/accents are the lighter gold, primary buttons stay Oak with white labels, and the header
+      stays black. Run axe/Lighthouse on a read page in dark mode: zero contrast violations. Spot-check
+      a sidebar (no light-on-cream), a content link, and a callout. (Known gap: Oak links on the *cream*
+      sidebar in **light** mode are ~4.2:1 — borderline; tracked in the brand guidelines §3.)
 - [ ] **One toggle.** The homepage no longer shows its own light/dark control; only the user-dropdown
       one remains. The Settings → Customization page is unaffected.
 - [ ] **Login screen.** Logged out, the login card shows a working theme toggle (top-right) and a

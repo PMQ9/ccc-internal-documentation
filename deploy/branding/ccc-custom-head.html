@@ -45,13 +45,51 @@
     --ccc-font-heading: Georgia, "Times New Roman", "Source Serif Pro", serif;
     --ccc-font-body:    system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-    /* ---- Map CCC tokens onto BookStack's own CSS variables ----
-       These names are from BookStack resources/sass/_colors.scss. Setting the
-       "Application primary color" in Settings ALSO sets --color-primary; this
-       redeclaration keeps the value correct even if that field is left default. */
-    --color-primary:       var(--ccc-gold-oak);   /* buttons (white label), accents */
-    --color-primary-light: #F2EBDC;               /* tint of oak for hover/selected rows */
-    --color-link:          var(--ccc-gold-oak);   /* link text — paired with underline below */
+    /* ---- Tier 2: semantic, MODE-AWARE tokens — the single place a mode differs.
+       Every surface rule below references THESE, never a raw hex or a palette
+       token directly. To retheme a surface, or to add a mode (e.g. high-contrast),
+       re-point these tokens in one block; the surface rules never change, so a
+       surface can't keep painting one mode's color into another. That is exactly
+       the failure this structure prevents — light/dark become data, not rules
+       scattered across the file. Light defaults here; dark is the block below. */
+    --ccc-chrome-surface: var(--ccc-cream);          /* sidebars / side panels  */
+    --ccc-link:           var(--ccc-gold-oak);       /* link + accent TEXT       */
+    --ccc-link-hover:     var(--ccc-gold-oak);       /* link hover               */
+    --ccc-selected-tint:  rgba(148, 110, 36, 0.15);  /* hover/selected row fill  */
+    --ccc-callout-ink:    var(--ccc-black);          /* callout text on a tint   */
+
+    /* ---- Tier 3: map the semantic tokens onto BookStack's OWN variables (names
+       from resources/sass/_vars.scss). BookStack does NOT re-derive these under
+       .dark-mode (verified on v26.05), so what we set here ships in BOTH modes
+       unless a token re-points it in the dark block. --color-primary is the one
+       value kept as raw Oak, NOT a mode token: BookStack uses it as a surface
+       BACKGROUND with a #FFF label (buttons, header, back-to-top), where white on
+       Oak is 4.65:1 (AA) but white on a lighter gold is 2.1:1 (fail). So it must
+       stay dark in both modes; only link/accent TEXT is the mode-varying part. */
+    --color-primary:       var(--ccc-gold-oak);
+    --color-primary-light: var(--ccc-selected-tint);
+    --color-link:          var(--ccc-link);
+  }
+
+  /* ----------------------------------------------------------------------
+     1b. Dark mode — re-point ONLY the mode-varying tokens, in one place.
+     BookStack flips its own text to light under html.dark-mode and owns the dark
+     page surface (#111). So we hand the chrome back to it (transparent, letting
+     #111 + BookStack's light text show through) and move link/accent TEXT to the
+     lighter golds that clear AA on #111: Flat Gold #CFAE70 = 8.9:1, Highlight
+     #ECB748 = 10.3:1. --color-primary is deliberately absent (see Tier 3) so its
+     white button label keeps 4.65:1. The CCC black header (section 2) is
+     intentionally dark in both modes, so it needs nothing here.
+     ---------------------------------------------------------------------- */
+  html.dark-mode {
+    --ccc-chrome-surface: transparent;
+    --ccc-link:           var(--ccc-gold-flat);
+    --ccc-link-hover:     var(--ccc-highlight);
+    --ccc-selected-tint:  rgba(207, 174, 112, 0.15);
+    /* currentColor on the 'color' property is defined to mean inherit, so callout
+       text follows BookStack's own dark callout color rather than our light ink.
+       ('inherit' here would hit the root's no-parent case and compute invalid.) */
+    --ccc-callout-ink:    currentColor;
   }
 
   /* ----------------------------------------------------------------------
@@ -84,7 +122,7 @@
     text-decoration: underline;
     text-underline-offset: 0.15em;
   }
-  a:hover { color: var(--ccc-gold-oak); }
+  a:hover { color: var(--ccc-link-hover); }
 
   /* ----------------------------------------------------------------------
      4. Primary buttons — white label on Oak (4.65:1). Hover darkens.
@@ -97,16 +135,22 @@
     border-color: var(--ccc-gold-oak);
   }
   .button:hover { background-color: #7d5d1e; border-color: #7d5d1e; }
-  /* Outline/secondary buttons: oak text on white, oak border. */
-  .button.outline { color: var(--ccc-gold-oak); background: transparent; }
+  /* Outline/secondary buttons: link-colored text on a transparent fill, so they
+     follow --ccc-link (Oak on white in light, Flat Gold on the dark page in dark
+     — Oak as text on #111 is only ~4.1:1, so it must not survive into dark mode). */
+  .button.outline { color: var(--ccc-link); background: transparent; }
 
   /* ----------------------------------------------------------------------
-     5. Chrome — warm cream sidebars/panels with black text.
+     5. Chrome — sidebars/panels. The surface is --ccc-chrome-surface (cream in
+     light; transparent in dark, where BookStack's #111 page and its light text
+     show through). No mode guard here on purpose: the token IS the mode switch,
+     so this rule cannot paint the wrong mode's color onto the sidebars — which is
+     precisely what left them cream-on-dark before.
      ---------------------------------------------------------------------- */
   .tri-layout-left,
   .tri-layout-right,
   .tri-layout-left-contents,
-  .tri-layout-right-contents { background-color: var(--ccc-cream); }
+  .tri-layout-right-contents { background-color: var(--ccc-chrome-surface); }
 
   /* ----------------------------------------------------------------------
      6. Accessibility — focus indicator (WCAG 2.4.7 / 2.4.11, non-text 3:1).
@@ -174,7 +218,7 @@
   .callout.info    { border-left-color: var(--ccc-sky);    }
   .callout.success { border-left-color: var(--ccc-sage);   }
   .callout.warning { border-left-color: var(--ccc-highlight); }
-  .callout         { color: var(--ccc-black); }
+  .callout         { color: var(--ccc-callout-ink); }
 
   /* ----------------------------------------------------------------------
      11. One dark/light toggle, not two. BookStack renders the toggle in
