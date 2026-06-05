@@ -10,8 +10,16 @@ deploy/branding/
   assets/ccc-logo-reversed.svg      # CCC lockup, white text — for the dark header (upload this one)
   assets/ccc-logo.svg               # CCC lockup, black text — for light backgrounds / print
   assets/ccc-favicon.svg            # the gold V alone — favicon / app icon
+  assets/eye.svg                    # login show-password icon  (Material Symbols, Apache-2.0)
+  assets/eye-off.svg                # login hide-password icon  (Material Symbols, Apache-2.0)
   README.md                         # this file
 ```
+
+The `eye*.svg` icons are the source of truth for the login show-password control. They're
+**inlined** into `ccc-custom-head.html` (not `<link>`ed) to keep that block network-free for the
+VPN-only deployment — same rule as the favicon. To restyle one, edit the asset and paste its `<path>`
+into the matching `var` in the script. They're [Google Material Symbols](https://github.com/google/material-design-icons)
+(`visibility` / `visibility_off`), Apache-2.0 — keep attribution if you swap them.
 
 The logos are the **real CCC marks**, assembled from Vanderbilt's own vector art on the live college
 site (the dimensional-metallic V + the "VANDERBILT" logotype, copied verbatim; college name set in a
@@ -28,7 +36,7 @@ public-read toggle and the default registration role (see
 | Lever | Mechanism | Where it's defined |
 |---|---|---|
 | App name | `APP_NAME` env var | `deploy/local/.env.example`, `compose.yaml`, `terraform/user-data.sh.tftpl` |
-| Colors, header, links, a11y CSS | Custom HTML Head Content (DB) | `ccc-custom-head.html` (paste once per env) |
+| Colors, header, links, a11y CSS, light/dark + login UX | Custom HTML Head Content (DB) | `ccc-custom-head.html` (paste once per env) |
 | Logo / favicon / primary color | Settings → Customization (DB upload + picker) | applied once; asset in `assets/` |
 
 We deliberately do **not** use BookStack's PHP theme system (`APP_THEME` + `themes/<name>/`): upstream
@@ -37,21 +45,58 @@ over the supported custom-head path.
 
 ## Apply procedure
 
-Do this on the local stack first (`connor-server`), confirm, then repeat on AWS after launch.
+The brand is **applied automatically** by [`apply-brand.sh`](../local/apply-brand.sh) on every deploy
+(and via `make apply-theme`). It is idempotent (writes a setting only when it differs) and the **repo
+is the source of truth** — a brand edit made in the BookStack UI is reverted on the next deploy. From
+this directory it sets:
 
-1. **App name** — already wired via `APP_NAME` (default `CCC Wiki`). Override in `.env` if desired.
-2. **Custom head CSS** — Settings → Customization → **Custom HTML Head Content**. Paste the entire
-   contents of [`ccc-custom-head.html`](./ccc-custom-head.html). Save.
-3. **Primary color** — Settings → Customization → **Application primary color** → `#946E24` (Oak). The
-   CSS sets this too, but the setting also drives a few server-rendered spots, so set both.
-4. **Logo** — Settings → Customization → **Logo** → upload
-   [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg) (white text — pairs with the dark
-   header this theme sets). On a light header, use [`assets/ccc-logo.svg`](./assets/ccc-logo.svg)
-   instead. If your BookStack build rejects SVG uploads (some lock down SVG for security), export the
-   chosen file to a transparent PNG ~480 px wide and upload that.
-5. **Favicon** — Settings → Customization → **Favicon** → upload
-   [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) (the gold V), or a 32×32 PNG export of it.
-6. Hard-refresh (Cmd/Ctrl+Shift+R) and run the validation checklist below.
+| What | BookStack setting(s) | From |
+|---|---|---|
+| App name | `app-name` | the `APP_NAME` env (compose `.env`, default `CCC Wiki`) |
+| Custom head (CSS/JS theme + UX features) | `app-custom-head` | [`ccc-custom-head.html`](./ccc-custom-head.html) |
+| Primary color | `app-color` (+ light/dark tints) | CCC Oak `#946E24` |
+| Logo | `app-logo` | [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg), staged into the uploads volume |
+| Favicon | `app-icon` (+ 180/128/64/32) | [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) |
+
+`ccc-custom-head.html` is **executable code** (it carries a `<script>` that runs as first-party JS on
+every page, including login), not just CSS — review changes to it like code; a merge auto-ships it to
+every user. See the deploy runbook's
+[security notes](../../docs/runbooks/connor-server-deploy.md#security-notes).
+
+**Manual fallback** (an environment without the deploy, e.g. the first AWS bring-up): do each in
+Settings → Customization — paste `ccc-custom-head.html` into **Custom HTML Head Content**, set
+**Application primary color** to `#946E24`, and upload **Logo** =
+[`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg) (white text, for the dark header; use
+[`assets/ccc-logo.svg`](./assets/ccc-logo.svg) on a light header) and **Favicon** =
+[`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg). If your build rejects SVG uploads (some lock down
+SVG for security), export to a transparent PNG (~480 px logo / 32×32 favicon) and upload that. Then
+hard-refresh (Cmd/Ctrl+Shift+R) and run the validation checklist below.
+
+**Favicon note:** the logo and favicon are SVGs served as static files. The in-tab favicon works in
+every modern browser (they fetch by URL and honor the real `image/svg+xml` type). But BookStack
+hardcodes `type="image/png"` for the icon `<link>`s and the PWA manifest (and emits an
+`apple-touch-icon`), so the **installed-PWA / iOS home-screen icon is best-effort** and may fall back
+to a generic glyph. That's fine for this desktop/VPN wiki; if a crisp installed icon is ever needed,
+stage a PNG export of `ccc-favicon.svg` for the `app-icon*` settings.
+
+## Light/dark mode behavior
+
+The `<script>` in `ccc-custom-head.html` owns light/dark on the client (BookStack's own preference
+is server-side and can't see the user's OS). The model is small and has one source of truth:
+
+| Question | Answer |
+|---|---|
+| Default for a new visitor? | The **OS** setting (`prefers-color-scheme`), and it tracks live OS changes. |
+| What if the user picks one? | Their choice wins and is remembered **per device** (`localStorage`), until they switch again. |
+| How many toggles? | **One.** BookStack renders a copy in the user dropdown *and* on the homepage; we hide the homepage copy and keep the dropdown one. The login page gets its own (no dropdown there). |
+| Where is it applied? | In `<head>` before first paint, so there's no light-then-dark flash. |
+
+Why client-side and not BookStack's setting: BookStack only offers a fixed instance default (light *or*
+dark) plus a per-user server toggle — neither follows the OS. Doing it in the head is the only lever
+that gives "default to the OS" without forking the image. Trade-off: the preference is per-device, not
+synced to the user's account. For an internal wiki that's the expected behavior and avoids any
+server/CSRF coupling. This is **skipped on Settings → Customization** (BookStack omits custom head
+there), so it never fights the settings editor.
 
 ## Validation checklist (WCAG 2.2 AA)
 
@@ -75,6 +120,14 @@ repo (BookStack isn't running in CI), so it's a manual gate against the live ins
       relying on hue alone.
 - [ ] **Screen reader smoke test.** One full read flow with VoiceOver (macOS) or NVDA (Windows): the
       logo's accessible name reads sensibly, headings outline correctly, links aren't all "read more."
+- [ ] **Light/dark.** With OS set to dark, a fresh browser (no stored choice) loads dark with no
+      light-then-dark flash; set OS to light and it follows. Toggle once — the choice sticks across
+      reloads and the toggle label matches the screen (no "Dark Mode" label on an already-dark page).
+- [ ] **One toggle.** The homepage no longer shows its own light/dark control; only the user-dropdown
+      one remains. The Settings → Customization page is unaffected.
+- [ ] **Login screen.** Logged out, the login card shows a working theme toggle (top-right) and a
+      show/hide control on the password field. Show/hide is keyboard-operable, has a visible focus
+      ring, doesn't block paste or autofill, and its target is >= 24x24 px.
 
 ## Trademark / usage
 

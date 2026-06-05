@@ -175,7 +175,227 @@
   .callout.success { border-left-color: var(--ccc-sage);   }
   .callout.warning { border-left-color: var(--ccc-highlight); }
   .callout         { color: var(--ccc-black); }
+
+  /* ----------------------------------------------------------------------
+     11. One dark/light toggle, not two. BookStack renders the toggle in
+     BOTH the user dropdown (button.icon-item) AND the homepage action row
+     (button.icon-list-item). We keep the dropdown one and hide every other
+     copy. Selector is by what we KEEP (the .icon-item dropdown button), so
+     it survives class drift on the homepage variants. The companion JS still
+     drives whichever toggle is visible. Requires :has() (all evergreen
+     browsers since 2023; fine for this internal/VPN audience).
+     ---------------------------------------------------------------------- */
+  form[action$="/preferences/toggle-dark-mode"]:has(button:not(.icon-item)) {
+    display: none;
+  }
+
+  /* ----------------------------------------------------------------------
+     12. Login-screen theme toggle (injected by the JS below — the login page
+     has no user dropdown). Colors inherit the card's text color so contrast
+     is correct on BOTH the light and dark card; hover adds an underline
+     rather than a color shift, so it never drops below AA on either surface.
+     ---------------------------------------------------------------------- */
+  .card.ccc-has-toggle { position: relative; }
+  .ccc-theme-toggle {
+    position: absolute;
+    top: 0.6rem;
+    inset-inline-end: 0.6rem;       /* logical: right in LTR, left in RTL */
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    min-width: 24px;                /* WCAG 2.5.8 target size */
+    min-height: 24px;
+    padding: 4px 8px;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .ccc-theme-toggle:hover { text-decoration: underline; }
+  .ccc-theme-toggle svg { width: 18px; height: 18px; fill: currentColor; }
+
+  /* ----------------------------------------------------------------------
+     13. Show/hide password control (injected into the login password field).
+     The JS wraps the input so the button sits inside the field's trailing
+     edge; padding-inline-end reserves room so masked text never slides under
+     it. The icon inherits the field's surrounding text color so it clears WCAG
+     1.4.11 (>=3:1 non-text) on BOTH the light (#fff) and dark (#333, set by
+     BookStack's _forms.scss) field surfaces — a fixed mid-gray fails ~2.8:1 on
+     the dark field, and dark is now a default (login follows the OS).
+     ---------------------------------------------------------------------- */
+  .ccc-pw-wrap { position: relative; display: block; }
+  .ccc-pw-wrap > input { width: 100%; padding-inline-end: 2.75rem; }
+  .ccc-pw-toggle {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;                /* comfortably past the 24px minimum */
+    padding: 0 10px;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+  }
+  .ccc-pw-toggle svg { width: 20px; height: 20px; fill: currentColor; }
 </style>
+
+<script id="ccc-theme">
+  /* ----------------------------------------------------------------------
+     CCC light/dark behavior + login enhancements.  See ./README.md.
+     Network-free and dependency-free (same VPN-only constraint as the rest
+     of this file). Runs in <head>, after BookStack has already set
+     <html class="dark-mode ..."> from its server-side preference.
+
+     What it does:
+       (2) Default theme follows the OS (prefers-color-scheme). An explicit
+           user toggle wins and is remembered per-device in localStorage.
+           Theme is resolved CLIENT-SIDE so the OS default applies for guests
+           and brand-new users too; BookStack's server-side dark-mode pref is
+           intentionally not used for display (it can't see the OS).
+       (1) Every dark/light toggle (BookStack's own + the injected login one)
+           is wired to that one source of truth and reflects the DISPLAYED
+           state, so there's no stale "Dark Mode" label on an already-dark page.
+       (3) Injects a theme toggle on the login screen (no dropdown there).
+       (4) Injects a show/hide control on the login password field.
+     ---------------------------------------------------------------------- */
+  (function () {
+    "use strict";
+
+    var html = document.documentElement;
+    var KEY = "ccc-color-scheme";            // "dark" | "light" | absent => follow OS
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    var serverDark = html.classList.contains("dark-mode");  // capture before we override
+
+    /* Icons are inlined (not hot-linked) to keep this block network-free for
+       the VPN-only deployment. Sources of truth, mirrored here verbatim:
+         dark/light  -> BookStack resources/icons/{dark,light}-mode.svg (match the UI)
+         eye/eye-off -> ./assets/{eye,eye-off}.svg (Material Symbols, Apache-2.0)
+       If you re-style an icon, edit the asset file and paste its path here.
+       Re-verify on upgrade — see docs/runbooks/bookstack-upgrade.md. */
+    var SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">';
+    var ICON_DARK  = SVG + '<path d="M10 2c-1.82 0-3.53.5-5 1.35C7.99 5.08 10 8.3 10 12s-2.01 6.92-5 8.65C6.47 21.5 8.18 22 10 22c5.52 0 10-4.48 10-10S15.52 2 10 2"/></svg>';
+    var ICON_LIGHT = SVG + '<path d="M20 15.31 23.31 12 20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20zM12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6"/></svg>';
+    var EYE = SVG + '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
+    var EYE_OFF = SVG + '<path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>';
+
+    /* Localized labels: learn whichever one BookStack rendered (it reflects
+       the server state); default the unseen one to English (deployment locale). */
+    var LABEL = { toDark: "Dark Mode", toLight: "Light Mode" };
+
+    function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+    function persist(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+    function resolveDark() { var s = stored(); return s ? s === "dark" : mq.matches; }
+    function isDark() { return html.classList.contains("dark-mode"); }
+
+    function apply(dark) {
+      html.classList.toggle("dark-mode", dark);
+      // The CCC header bar is black (--ccc-black) in BOTH modes, so tint the
+      // browser chrome / PWA to match it. (Don't capture the server-rendered
+      // meta as a "light" baseline — it reflects BookStack's server-side dark
+      // pref, which can disagree with the client-resolved theme.)
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute("content", "#1C1C1C");
+    }
+
+    /* (2) Apply ASAP, in <head>, before the body paints — avoids a flash. */
+    apply(resolveDark());
+
+    /* (2) Track OS changes while the user has made no explicit choice. */
+    function onSystemChange() { if (!stored()) { apply(mq.matches); refreshToggles(); } }
+    if (mq.addEventListener) mq.addEventListener("change", onSystemChange);
+    else if (mq.addListener) mq.addListener(onSystemChange);  // older Safari
+
+    /* (1) Make every tagged toggle reflect the DISPLAYED state. */
+    function refreshToggles() {
+      var dark = isDark();
+      var btns = document.querySelectorAll("[data-ccc-toggle]");
+      for (var i = 0; i < btns.length; i++) {
+        var icon = btns[i].querySelector("[data-ccc-icon]");
+        var label = btns[i].querySelector("[data-ccc-label]");
+        if (icon) icon.innerHTML = dark ? ICON_LIGHT : ICON_DARK;
+        if (label) label.textContent = dark ? LABEL.toLight : LABEL.toDark;
+      }
+    }
+
+    function setExplicit(dark) { persist(dark ? "dark" : "light"); apply(dark); refreshToggles(); }
+    function toggleTheme() { setExplicit(!isDark()); }
+
+    /* (1) Adopt BookStack's own toggle form(s): take over the click so the
+       switch is instant (no server round-trip / reload) and drives the single
+       client-side source of truth. */
+    function adoptBookstackToggles() {
+      var forms = document.querySelectorAll('form[action$="/preferences/toggle-dark-mode"]');
+      for (var i = 0; i < forms.length; i++) {
+        var form = forms[i];
+        var btn = form.querySelector("button");
+        if (!btn || btn.hasAttribute("data-ccc-toggle")) continue;
+        var spans = btn.querySelectorAll("span");          // [icon, label]
+        var rendered = spans[1] ? spans[1].textContent.trim() : "";
+        if (rendered) { if (serverDark) LABEL.toLight = rendered; else LABEL.toDark = rendered; }
+        if (spans[0]) spans[0].setAttribute("data-ccc-icon", "");
+        if (spans[1]) spans[1].setAttribute("data-ccc-label", "");
+        btn.setAttribute("data-ccc-toggle", "");
+        form.addEventListener("submit", function (e) { e.preventDefault(); toggleTheme(); });
+      }
+    }
+
+    /* (3)(4) Login-screen enhancements. */
+    function enhanceLogin() {
+      var form = document.getElementById("login-form");
+      if (!form) return;
+
+      // (3) Theme toggle, top-right of the card. Appended last so it sits
+      // after the login fields in tab order; positioned top-right via CSS.
+      var card = form.closest(".card");
+      if (card && !card.querySelector(".ccc-theme-toggle")) {
+        card.classList.add("ccc-has-toggle");
+        var t = document.createElement("button");
+        t.type = "button";
+        t.className = "ccc-theme-toggle";
+        t.setAttribute("data-ccc-toggle", "");
+        t.innerHTML = '<span data-ccc-icon></span><span data-ccc-label></span>';  // visible text = accessible name
+        t.addEventListener("click", toggleTheme);
+        card.appendChild(t);
+      }
+
+      // (4) Show/hide password.
+      var pw = form.querySelector('input[type="password"]');
+      if (pw && !pw.closest(".ccc-pw-wrap")) {
+        pw.setAttribute("autocomplete", "current-password");  // keep password managers working (WCAG 3.3.8)
+        var wrap = document.createElement("div");
+        wrap.className = "ccc-pw-wrap";
+        pw.parentNode.insertBefore(wrap, pw);
+        wrap.appendChild(pw);
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ccc-pw-toggle";
+        // Toggle button: a STABLE accessible name + aria-pressed carries the
+        // on/off state. We keep focus on the button (no pw.focus()), so the
+        // pressed-state change is announced to AT and keyboard focus isn't
+        // yanked to the field (WCAG 4.1.2). The SVG flips for sighted users.
+        btn.setAttribute("aria-label", "Show password");
+        btn.setAttribute("aria-pressed", "false");
+        btn.innerHTML = EYE;
+        btn.addEventListener("click", function () {
+          var reveal = pw.type === "password";
+          pw.type = reveal ? "text" : "password";
+          btn.innerHTML = reveal ? EYE_OFF : EYE;
+          btn.setAttribute("aria-pressed", reveal ? "true" : "false");
+        });
+        wrap.appendChild(btn);
+      }
+    }
+
+    function init() { adoptBookstackToggles(); enhanceLogin(); refreshToggles(); }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+    else init();
+  })();
+</script>
 
 <!--
   LOGO / FAVICON / APP ICON  (upload via Settings → Customization — see ./README.md):

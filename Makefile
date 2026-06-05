@@ -62,7 +62,7 @@ shellcheck: ## shellcheck all shell + the rendered user-data template
 	./tests/lib/render_user_data.sh > /tmp/_user_data.rendered.sh
 	$(DKR) -v /tmp/_user_data.rendered.sh:/work/_user_data.rendered.sh $(SHELLCHECK_IMG) \
 	  --shell=bash --severity=warning \
-	  deploy/local/verify.sh deploy/local/dev-up.sh deploy/local/deploy-remote.sh deploy/local/snapshot.sh \
+	  deploy/local/verify.sh deploy/local/dev-up.sh deploy/local/deploy-remote.sh deploy/local/snapshot.sh deploy/local/apply-brand.sh \
 	  tests/lib/common.sh tests/integration/run.sh \
 	  tests/integration/helpers/load.bash tests/lib/render_user_data.sh \
 	  tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh _user_data.rendered.sh
@@ -97,6 +97,10 @@ user-data-contract: ## assert rendered user-data fetches secrets (bakes none)
 .PHONY: deploy
 deploy: ## rsync working tree to connor-server + (re)launch the stack (reuses dev-up.sh)
 	deploy/local/deploy-remote.sh
+
+.PHONY: apply-theme
+apply-theme: ## re-apply the CCC brand (head + logo/favicon/color) to the running stack (no restart; deploys do this automatically)
+	bash deploy/local/apply-brand.sh
 
 # ---- aggregates -------------------------------------------------------------
 .PHONY: check
