@@ -10,8 +10,16 @@ deploy/branding/
   assets/ccc-logo-reversed.svg      # CCC lockup, white text — for the dark header (upload this one)
   assets/ccc-logo.svg               # CCC lockup, black text — for light backgrounds / print
   assets/ccc-favicon.svg            # the gold V alone — favicon / app icon
+  assets/eye.svg                    # login show-password icon  (Material Symbols, Apache-2.0)
+  assets/eye-off.svg                # login hide-password icon  (Material Symbols, Apache-2.0)
   README.md                         # this file
 ```
+
+The `eye*.svg` icons are the source of truth for the login show-password control. They're
+**inlined** into `ccc-custom-head.html` (not `<link>`ed) to keep that block network-free for the
+VPN-only deployment — same rule as the favicon. To restyle one, edit the asset and paste its `<path>`
+into the matching `var` in the script. They're [Google Material Symbols](https://github.com/google/material-design-icons)
+(`visibility` / `visibility_off`), Apache-2.0 — keep attribution if you swap them.
 
 The logos are the **real CCC marks**, assembled from Vanderbilt's own vector art on the live college
 site (the dimensional-metallic V + the "VANDERBILT" logotype, copied verbatim; college name set in a
@@ -28,7 +36,7 @@ public-read toggle and the default registration role (see
 | Lever | Mechanism | Where it's defined |
 |---|---|---|
 | App name | `APP_NAME` env var | `deploy/local/.env.example`, `compose.yaml`, `terraform/user-data.sh.tftpl` |
-| Colors, header, links, a11y CSS | Custom HTML Head Content (DB) | `ccc-custom-head.html` (paste once per env) |
+| Colors, header, links, a11y CSS, light/dark + login UX | Custom HTML Head Content (DB) | `ccc-custom-head.html` (paste once per env) |
 | Logo / favicon / primary color | Settings → Customization (DB upload + picker) | applied once; asset in `assets/` |
 
 We deliberately do **not** use BookStack's PHP theme system (`APP_THEME` + `themes/<name>/`): upstream
@@ -53,6 +61,25 @@ Do this on the local stack first (`connor-server`), confirm, then repeat on AWS 
    [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) (the gold V), or a 32×32 PNG export of it.
 6. Hard-refresh (Cmd/Ctrl+Shift+R) and run the validation checklist below.
 
+## Light/dark mode behavior
+
+The `<script>` in `ccc-custom-head.html` owns light/dark on the client (BookStack's own preference
+is server-side and can't see the user's OS). The model is small and has one source of truth:
+
+| Question | Answer |
+|---|---|
+| Default for a new visitor? | The **OS** setting (`prefers-color-scheme`), and it tracks live OS changes. |
+| What if the user picks one? | Their choice wins and is remembered **per device** (`localStorage`), until they switch again. |
+| How many toggles? | **One.** BookStack renders a copy in the user dropdown *and* on the homepage; we hide the homepage copy and keep the dropdown one. The login page gets its own (no dropdown there). |
+| Where is it applied? | In `<head>` before first paint, so there's no light-then-dark flash. |
+
+Why client-side and not BookStack's setting: BookStack only offers a fixed instance default (light *or*
+dark) plus a per-user server toggle — neither follows the OS. Doing it in the head is the only lever
+that gives "default to the OS" without forking the image. Trade-off: the preference is per-device, not
+synced to the user's account. For an internal wiki that's the expected behavior and avoids any
+server/CSRF coupling. This is **skipped on Settings → Customization** (BookStack omits custom head
+there), so it never fights the settings editor.
+
 ## Validation checklist (WCAG 2.2 AA)
 
 This is the **themed-deployment accessibility sign-off** the repo already tracks as Phase 3
@@ -75,6 +102,14 @@ repo (BookStack isn't running in CI), so it's a manual gate against the live ins
       relying on hue alone.
 - [ ] **Screen reader smoke test.** One full read flow with VoiceOver (macOS) or NVDA (Windows): the
       logo's accessible name reads sensibly, headings outline correctly, links aren't all "read more."
+- [ ] **Light/dark.** With OS set to dark, a fresh browser (no stored choice) loads dark with no
+      light-then-dark flash; set OS to light and it follows. Toggle once — the choice sticks across
+      reloads and the toggle label matches the screen (no "Dark Mode" label on an already-dark page).
+- [ ] **One toggle.** The homepage no longer shows its own light/dark control; only the user-dropdown
+      one remains. The Settings → Customization page is unaffected.
+- [ ] **Login screen.** Logged out, the login card shows a working theme toggle (top-right) and a
+      show/hide control on the password field. Show/hide is keyboard-operable, has a visible focus
+      ring, doesn't block paste or autofill, and its target is >= 24x24 px.
 
 ## Trademark / usage
 

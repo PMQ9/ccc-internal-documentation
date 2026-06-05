@@ -6,6 +6,7 @@ infrastructure, not versioned software, so entries are dated rather than tagged.
 
 | Date | Change | PR |
 |---|---|---|
+| 2026-06-05 | Light/dark + login UX in the brand theme layer — default follows the OS (`prefers-color-scheme`), one toggle (the duplicate homepage one is hidden), and the login screen gets a theme toggle + show/hide password (icons in `deploy/branding/assets/`) | — |
 | 2026-06-05 | connor-server is now a live, continuously-deployed Phase-0 instance (LAN-only, plain HTTP, seeded admin — not production) — on-demand `make deploy` and auto-on-merge GitOps via a self-hosted runner (`deploy.yml`), snapshot-before-deploy, paths/labels as repo Variables, `docs/runbooks/connor-server-deploy.md` | #14 |
 | 2026-06-05 | Documentation policy (expand existing docs, table-first, concise, no emojis), this changelog, and a README "Updates" section | — |
 | 2026-06-05 | Project status tracker — phases, decisions, open items, roadmap, risks (`docs/status.md`) | #10 |

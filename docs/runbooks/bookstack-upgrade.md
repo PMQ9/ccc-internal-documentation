@@ -39,6 +39,12 @@ migration event.** Treat it with care.
    page renders. (`/status` is a deliberately **DB-backed** check here — unlike the ALB's DB-free
    `/icon.png` health check — precisely because you want to confirm PHP+DB recovered post-migration.)
 6. **Verify** a page edit creates a revision and media still loads.
+7. **Re-verify the brand theme layer.** `ccc-custom-head.html` couples to upstream markup that can
+   drift across versions — the dark/light toggle selectors (`button.icon-item` / the
+   `/preferences/toggle-dark-mode` form), the login form structure, and the dark/light icons mirrored
+   from BookStack's own `resources/icons/`. Run the
+   [branding validation checklist](../../deploy/branding/README.md#validation-checklist-wcag-22-aa),
+   paying attention to the light/dark, one-toggle, and login-screen items.
 
 ## Rollback
 
