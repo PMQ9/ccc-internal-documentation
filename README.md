@@ -33,7 +33,7 @@ restore. VPN reachability is enforced at the AWS network layer — see the [secu
 deploy/local/     Local validation stack for connor-server (BookStack + MariaDB + verify.sh)
 terraform/        AWS production footprint (validated; apply is the AWS phase, gated on VUIT inputs)
 docs/architecture.md   Design, decisions, security note, validated findings
-docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SAML cert rotation
+docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SAML cert rotation, connor-server deploy
 ```
 
 ## Status

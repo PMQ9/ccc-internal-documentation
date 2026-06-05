@@ -161,4 +161,4 @@ applies here too: fewer, denser docs beat more, thinner ones.
 - [docs/test-plans/bookstack-platform.md](docs/test-plans/bookstack-platform.md) — what each test
   layer proves and why; [tests/README.md](tests/README.md) is how to run them.
 - [docs/runbooks/](docs/runbooks/) — VUIT coordination, break-glass admin, BookStack upgrade, DR
-  restore drill, SAML cert rotation, CI/CD pipeline.
+  restore drill, SAML cert rotation, CI/CD pipeline, connor-server deploy.

@@ -25,6 +25,15 @@
       "detail": "down -v (delete all wiki data) then a clean from-scratch deploy"
     },
     {
+      "label": "BookStack: Deploy to connor-server (remote)",
+      "type": "shell",
+      "command": "./deploy-remote.sh",
+      "options": { "cwd": "${workspaceFolder}/deploy/local" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "detail": "rsync working tree to connor-server, snapshot + PULL/recreate the stack, verify, print LAN URL"
+    },
+    {
       "label": "BookStack: Logs (follow)",
       "type": "shell",
       "command": "docker compose logs -f bookstack",

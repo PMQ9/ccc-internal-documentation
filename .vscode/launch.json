@@ -18,6 +18,13 @@
       "request": "launch",
       "command": "./dev-up.sh --fresh",
       "cwd": "${workspaceFolder}/deploy/local"
+    },
+    {
+      "name": "▶ Deploy to connor-server (remote)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./deploy-remote.sh",
+      "cwd": "${workspaceFolder}/deploy/local"
     }
   ]
 }

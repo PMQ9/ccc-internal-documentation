@@ -62,7 +62,8 @@ shellcheck: ## shellcheck all shell + the rendered user-data template
 	./tests/lib/render_user_data.sh > /tmp/_user_data.rendered.sh
 	$(DKR) -v /tmp/_user_data.rendered.sh:/work/_user_data.rendered.sh $(SHELLCHECK_IMG) \
 	  --shell=bash --severity=warning \
-	  deploy/local/verify.sh deploy/local/dev-up.sh tests/lib/common.sh tests/integration/run.sh \
+	  deploy/local/verify.sh deploy/local/dev-up.sh deploy/local/deploy-remote.sh deploy/local/snapshot.sh \
+	  tests/lib/common.sh tests/integration/run.sh \
 	  tests/integration/helpers/load.bash tests/lib/render_user_data.sh \
 	  tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh _user_data.rendered.sh
 
@@ -91,6 +92,11 @@ pins: ## assert pins don't float + Makefile tool pins == CI pins (single source 
 .PHONY: user-data-contract
 user-data-contract: ## assert rendered user-data fetches secrets (bakes none)
 	./tests/lib/check_user_data_contract.sh
+
+# ---- deploy (developer action; touches a remote host, so NOT in `check`) ----
+.PHONY: deploy
+deploy: ## rsync working tree to connor-server + (re)launch the stack (reuses dev-up.sh)
+	deploy/local/deploy-remote.sh
 
 # ---- aggregates -------------------------------------------------------------
 .PHONY: check

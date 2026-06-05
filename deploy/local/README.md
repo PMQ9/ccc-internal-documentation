@@ -25,6 +25,11 @@ docker run --rm --entrypoint /bin/bash lscr.io/linuxserver/bookstack:latest appk
 Set strong `DB_ROOT_PASSWORD` / `DB_PASSWORD`, and confirm `APP_URL` matches how you'll browse
 (`http://10.76.88.214` for LAN, or `http://localhost:8080` if you tunnel — see §3).
 
+> **Iterating from your laptop?** After this one-time setup, push changes and relaunch with a single
+> command — `make deploy` (or the VSCode ▶ "Deploy to connor-server (remote)" button). It snapshots,
+> rsyncs your working tree (never your `.env`), redeploys, and runs `verify.sh`. See
+> [../../docs/runbooks/connor-server-deploy.md](../../docs/runbooks/connor-server-deploy.md).
+
 ## 2. Launch
 
 ```bash
