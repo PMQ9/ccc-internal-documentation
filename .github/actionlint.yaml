@@ -1,0 +1,7 @@
+# Declare the self-hosted runner labels used by deploy.yml so actionlint's runner-label
+# rule doesn't flag them as unknown. This runner is registered ON connor-server (LAN box)
+# for the Phase-0 auto-deploy — see docs/runbooks/connor-server-deploy.md.
+self-hosted-runner:
+  labels:
+    - connor-server
+    - ccc-wiki

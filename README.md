@@ -33,7 +33,7 @@ restore. VPN reachability is enforced at the AWS network layer — see the [secu
 deploy/local/     Local validation stack for connor-server (BookStack + MariaDB + verify.sh)
 terraform/        AWS production footprint (validated; apply is the AWS phase, gated on VUIT inputs)
 docs/architecture.md   Design, decisions, security note, validated findings
-docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SAML cert rotation
+docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SAML cert rotation, connor-server deploy
 ```
 
 ## Status
@@ -46,6 +46,13 @@ docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SA
   gated on VUIT inputs (VPN CIDRs, DNS/subdomain, TLS cert, SAML SP registration + attribute release).
   See [terraform/README.md](terraform/README.md) and
   [docs/runbooks/vuit-coordination-checklist.md](docs/runbooks/vuit-coordination-checklist.md).
+
+## Updates
+
+- **What changed, when** — see [CHANGELOG.md](CHANGELOG.md).
+- **Current state** — see the [project status tracker](docs/status.md).
+- **Editing the docs?** Expand an existing doc before adding a new one; keep it short and table-first;
+  no emojis; log notable changes in the changelog. Full policy in [CLAUDE.md](CLAUDE.md#documentation).
 
 ## Quick start (local test)
 

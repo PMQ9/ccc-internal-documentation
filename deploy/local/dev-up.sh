@@ -11,6 +11,7 @@
 #   ./dev-up.sh           # up (keeps existing data) + wait + open
 #   ./dev-up.sh --fresh   # wipe volumes first → from-scratch deploy
 #   NO_OPEN=1 ./dev-up.sh # don't open a browser (headless / CI)
+#   PULL=1 ./dev-up.sh    # docker compose pull first (fetch a bumped image pin, e.g. on a deploy)
 #
 # Note: the canonical image pins live in tests/integration/run.sh and are mirrored in
 # .env.example (see CLAUDE.md "No floating :latest"); this script reads them from
@@ -67,6 +68,12 @@ if [ "$FRESH" -eq 1 ]; then
 fi
 
 # --- 3. bring the stack up ---------------------------------------------------
+# PULL=1 refreshes pinned images first (used by deploys so a bumped BOOKSTACK_TAG /
+# MARIADB_TAG in .env is actually fetched). Default off so local dev stays fast/offline.
+if [ "${PULL:-0}" = "1" ]; then
+  echo "==> PULL=1: docker compose pull"
+  docker compose pull
+fi
 echo "==> docker compose up -d"
 docker compose up -d
 

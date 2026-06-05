@@ -77,7 +77,8 @@ jobs:
           cp "$RUNNER_TEMP/user_data.rendered.sh" ./user_data.rendered.sh
           docker run --rm -v "$PWD":/work -w /work koalaman/shellcheck:v0.10.0 \
             --shell=bash --severity=warning \
-            deploy/local/verify.sh tests/lib/common.sh tests/lib/render_user_data.sh \
+            deploy/local/verify.sh deploy/local/dev-up.sh deploy/local/deploy-remote.sh deploy/local/snapshot.sh \
+            tests/lib/common.sh tests/lib/render_user_data.sh \
             tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh \
             tests/integration/run.sh tests/integration/helpers/load.bash user_data.rendered.sh
       - name: docker compose config validates

@@ -1,0 +1,85 @@
+name: deploy (connor-server, self-hosted)
+
+# GitOps auto-deploy of the Phase-0 validation stack to connor-server (LAN 10.76.88.214) on
+# merge to main. A self-hosted runner ON the box does the work — GitHub-hosted runners can't
+# reach the LAN. STAGED like terraform-plan.yml: the job is SKIPPED (not left pending) until
+# repo Variable DEPLOY_CONNOR_ENABLED=true is set, so a push never hangs before the runner exists.
+#
+# To enable (see docs/runbooks/connor-server-deploy.md):
+#   1. Register a self-hosted runner on connor-server with labels: self-hosted,connor-server,ccc-wiki
+#   2. Settings -> Secrets and variables -> Actions -> Variables -> DEPLOY_CONNOR_ENABLED = true  (LAST)
+#
+# Repo Variables (Settings -> Secrets and variables -> Actions -> Variables) — hot-editable, all
+# optional with the defaults shown:
+#   DEPLOY_CONNOR_ENABLED  'true' to activate (default: inert/skipped)
+#   DEPLOY_LIVE_DIR        deploy path on the box      (default /home/connor/ccc-wiki)
+#   DEPLOY_BACKUP_DIR      snapshot dir on the box      (default /home/connor/ccc-wiki-backups)
+#   DEPLOY_RUNNER_LABELS   JSON array of runner labels  (default ["self-hosted","connor-server","ccc-wiki"])
+#
+# SECURITY: push-to-main only — NEVER add pull_request. The runner holds the live .env and a
+# Docker socket; running fork-PR code on it would be remote code execution.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-connor-server
+  cancel-in-progress: false # serialize deploys; never cancel one mid-flight
+
+jobs:
+  deploy:
+    name: deploy -> connor-server
+    # Runner labels + deploy paths are repo Variables (hot-editable in the GitHub UI, no code
+    # change) with sensible defaults if unset — see docs/runbooks/connor-server-deploy.md.
+    # NB: DEPLOY_RUNNER_LABELS must match how the runner was registered (changing it requires
+    # re-registering the runner with the new labels).
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted","connor-server","ccc-wiki"]') }}
+    if: ${{ vars.DEPLOY_CONNOR_ENABLED == 'true' }} # skipped (not pending) until activated
+    timeout-minutes: 20
+    env:
+      LIVE_DIR: ${{ vars.DEPLOY_LIVE_DIR || '/home/connor/ccc-wiki' }}
+      BACKUP_DIR: ${{ vars.DEPLOY_BACKUP_DIR || '/home/connor/ccc-wiki-backups' }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Sync checkout into the live deploy path (PROTECT .env / volume / state)
+        run: |
+          set -euo pipefail
+          # rsync only updates files — the running stack, named volume, and DB are untouched
+          # until the bring-up step, so the snapshot below still captures pre-deploy state.
+          # --delete mirrors the checkout; excluded files (the live .env, backups, state) are
+          # deletion-protected. *.env.example include precedes *.env exclude (first-match-wins).
+          rsync -a --delete \
+            --include='*.env.example' --exclude='.env' --exclude='*.env' \
+            --exclude='.git/' --exclude='.claude/' \
+            --exclude='backup-*' --exclude='*.sql' --exclude='*.tgz' --exclude='*.tar.gz' \
+            --exclude='.terraform/' --exclude='*.tfstate' --exclude='*.tfstate.*' \
+            "$GITHUB_WORKSPACE/" "$LIVE_DIR/"
+
+      - name: Pre-deploy DB + media snapshot (rollback point)
+        run: BACKUP_DIR="$BACKUP_DIR" bash "$LIVE_DIR/deploy/local/snapshot.sh"
+
+      - name: Deploy (reuse dev-up.sh; pull pinned images, headless)
+        run: |
+          set -euo pipefail
+          cd "$LIVE_DIR/deploy/local"
+          PULL=1 NO_OPEN=1 ./dev-up.sh
+
+      - name: Post-deploy smoke test
+        run: |
+          set -euo pipefail
+          cd "$LIVE_DIR/deploy/local"
+          # verify.sh is committed 644 (README runs it as `bash verify.sh`) — invoke via bash.
+          bash verify.sh
+
+      - name: On failure, surface recent app logs
+        if: failure()
+        run: |
+          cd "$LIVE_DIR/deploy/local" || exit 0
+          docker compose ps || true
+          docker compose logs --tail=80 bookstack || true
+          echo "::warning::deploy failed — restore the latest snapshot pair in $BACKUP_DIR (runbook: rollback)"

@@ -24,6 +24,7 @@ everything also runs locally via `make` (see the [Makefile](../../Makefile) and
 | [`ci.yml`](../../.github/workflows/ci.yml) | every PR + push to `main` | repo is shippable: TF fmt/validate/tflint/**test**, trivy+checkov, shellcheck, compose, actionlint, gitleaks, offline link check, `:latest`-pin gate, user-data contract, and the **integration suite** (stack + bats + stress, PR profile) | **yes** |
 | [`weekly.yml`](../../.github/workflows/weekly.yml) | Mon 09:17 UTC + manual | full DR drill (backup/restore + durability boundary); upstream **drift** (`:latest`); image **CVE** scan; **online** link check | partial — see below |
 | [`terraform-plan.yml`](../../.github/workflows/terraform-plan.yml) | manual (`workflow_dispatch`) | real `terraform plan` against AWS via OIDC — **no-ops until the AWS phase is configured** | n/a (AWS phase) |
+| [`deploy.yml`](../../.github/workflows/deploy.yml) | push to `main` + manual | redeploys the Phase-0 stack to `connor-server` via a self-hosted runner — **skipped until `DEPLOY_CONNOR_ENABLED=true`** (see [connor-server-deploy.md](connor-server-deploy.md)) | no — advisory |
 
 The PR pipeline runs entirely **without cloud credentials** (Terraform providers are
 mocked in `terraform test`; everything else is local containers), so it is fast and safe

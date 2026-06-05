@@ -138,10 +138,27 @@ without introducing drift. The bias is **subtraction**: fewer moving parts, enfo
   style preference. A change that adds an abstraction should say, in the PR, what it buys and what it
   costs.
 
+## Documentation
+
+Docs are for humans to read — optimize for the reader, not the writer. The **subtraction** bias
+applies here too: fewer, denser docs beat more, thinner ones.
+
+- **Don't add a doc unless one is needed; expand an existing one first.** Same rule as code seams —
+  extend `architecture.md`, `status.md`, a runbook, or the nearest README before creating a new
+  top-level doc. A new file earns its place only when no existing doc fits. The map of what lives
+  where is below.
+- **Show, don't bury.** Prefer a table or a diagram; bullets are an acceptable middle ground; avoid
+  long technical paragraphs. If a reader has to wade through prose to find one fact, restructure it.
+- **Short, concise, readable.** Write so a non-expert can follow it. If it's too complex for an
+  average reader, it isn't done — simplify or split it, don't ship it.
+- **No emojis.**
+- **Log notable changes in [CHANGELOG.md](CHANGELOG.md)** — reader- or operator-facing changes (new
+  behavior, infra, gates, runbooks), newest first. Not every commit.
+
 ## Where docs live
 
 - [docs/architecture.md](docs/architecture.md) — design, security model, validated findings.
 - [docs/test-plans/bookstack-platform.md](docs/test-plans/bookstack-platform.md) — what each test
   layer proves and why; [tests/README.md](tests/README.md) is how to run them.
 - [docs/runbooks/](docs/runbooks/) — VUIT coordination, break-glass admin, BookStack upgrade, DR
-  restore drill, SAML cert rotation, CI/CD pipeline.
+  restore drill, SAML cert rotation, CI/CD pipeline, connor-server deploy.
