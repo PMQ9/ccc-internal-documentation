@@ -1,8 +1,24 @@
-# Local validation stack (connor-server)
+# Local stack (connor-server) — Phase-0 validation + live dev/staging
 
-Proves the BookStack platform behaves correctly **before** the AWS deployment. Runs the same
-BookStack configuration keys we use in production. See [../../docs/architecture.md](../../docs/architecture.md)
-for how this maps to AWS, and the [plan](../../README.md) for the full design.
+Proves the BookStack platform behaves correctly **before** the AWS deployment, *and* now runs as a
+live, always-on Phase-0 instance on the Vanderbilt LAN holding real data (accounts, pages,
+revisions, media) on Docker named volumes. Runs the same BookStack configuration keys we use in
+production. See [../../docs/architecture.md](../../docs/architecture.md) for how this maps to AWS,
+and the [plan](../../README.md) for the full design.
+
+> **Still Phase 0 / pre-AWS** — LAN-only, plain HTTP (no TLS), standard DB auth (no SAML yet),
+> single node, seeded admin. **Not production.** The AWS phases (1–3) are unchanged and gated on
+> VUIT inputs.
+
+Two deploy paths keep the live instance current (both snapshot DB+media to `~/ccc-wiki-backups`
+first, never overwrite the live `.env`, and never `down -v`):
+
+- **On-demand from a laptop** — `make deploy` (or the VSCode ▶ "Deploy to connor-server (remote)"
+  button). See §1.
+- **Auto-on-merge (GitOps)** — a push to `main` deploys via a self-hosted runner on connor-server,
+  gated by the repo Variable `DEPLOY_CONNOR_ENABLED`.
+
+Both are documented in [../../docs/runbooks/connor-server-deploy.md](../../docs/runbooks/connor-server-deploy.md).
 
 > **Host:** `connor-server` (`connor-minipc`, `10.76.88.214`) — Ubuntu 24.04, Docker + Compose,
 > ports 80/443 free. `ssh connor-server`.
@@ -24,11 +40,6 @@ docker run --rm --entrypoint /bin/bash lscr.io/linuxserver/bookstack:latest appk
 
 Set strong `DB_ROOT_PASSWORD` / `DB_PASSWORD`, and confirm `APP_URL` matches how you'll browse
 (`http://10.76.88.214` for LAN, or `http://localhost:8080` if you tunnel — see §3).
-
-> **Iterating from your laptop?** After this one-time setup, push changes and relaunch with a single
-> command — `make deploy` (or the VSCode ▶ "Deploy to connor-server (remote)" button). It snapshots,
-> rsyncs your working tree (never your `.env`), redeploys, and runs `verify.sh`. See
-> [../../docs/runbooks/connor-server-deploy.md](../../docs/runbooks/connor-server-deploy.md).
 
 ## 2. Launch
 

@@ -11,8 +11,15 @@ and the Terraform that provisions it on AWS without exposing the wiki off-VPN or
 
 Two shippable artifacts, deployed in two phases:
 
-- **`deploy/local/`** — Docker Compose validation stack (BookStack + MariaDB) run on `connor-server`.
-  **Phase 0: validated green** on BookStack `v26.05-ls265`.
+- **`deploy/local/`** — Docker Compose stack (BookStack + MariaDB). **Phase 0: validated green** on
+  BookStack `v26.05-ls265`, and now a **live, always-on dev/staging instance** on `connor-server`
+  (Vanderbilt LAN, `http://10.76.88.214`) holding real data on named volumes. Two validated deploy
+  paths: **on-demand** (`make deploy` → `deploy-remote.sh`) and **GitOps auto-on-merge**
+  (`.github/workflows/deploy.yml` on a self-hosted runner on `connor-server`, gated by repo Variable
+  `DEPLOY_CONNOR_ENABLED`). Each deploy snapshots DB+media first (`snapshot.sh`), never overwrites
+  the live `.env`, and never runs `down -v`. Still **Phase 0 / pre-AWS**: LAN-only, plain HTTP, DB
+  auth (no SAML), single node, seeded admin — **not production**. See
+  [docs/runbooks/connor-server-deploy.md](docs/runbooks/connor-server-deploy.md).
 - **`terraform/`** — AWS production footprint. **Phase 1+: `terraform validate`-clean but NOT yet
   applied.** Applying is gated on VUIT (Vanderbilt IT) inputs: VPN CIDRs, DNS/subdomain, TLS cert,
   SAML SP registration + attribute release.
@@ -60,6 +67,9 @@ BOOKSTACK_TAG=latest MARIADB_TAG=latest tests/integration/run.sh --profile full 
   commit SHA, scanner images by tag).
 - **`weekly.yml`** — full integration drill, upstream-image drift detection (runs the contract
   against `:latest`), image CVE scan, online link check.
+- **`deploy.yml`** — GitOps deploy to `connor-server` on push to main, via a **self-hosted runner**
+  registered there. Gated by repo Variable `DEPLOY_CONNOR_ENABLED`; push-only (never `pull_request`).
+  See [docs/runbooks/connor-server-deploy.md](docs/runbooks/connor-server-deploy.md).
 - **`terraform-plan.yml`** — manual (`workflow_dispatch`), OIDC-authenticated `terraform plan`
   against the real account. **No-ops safely** until repo Variables (`AWS_ROLE_ARN`, `AWS_REGION`,
   `TFSTATE_BUCKET`) are set — it's staged for the AWS phase, not active yet.

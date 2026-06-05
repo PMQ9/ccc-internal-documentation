@@ -70,6 +70,16 @@ NAT, trimmed endpoints); Terraform IaC.
 
 ## Findings validated on connor-server (BookStack v26.05-ls265 / MariaDB 11.4.12)
 
+`connor-server` is now a **live, continuously-deployed Phase-0 instance** on the Vanderbilt LAN
+(`http://10.76.88.214`) holding real data — accounts, pages, revisions, uploaded media — on Docker
+named volumes (`ccc-wiki_db_data` for the DB, `ccc-wiki_bookstack_config` for media). It is both the
+host where these findings were validated **and** an always-on dev/staging wiki. It is **not**
+production: LAN-only, plain HTTP (no TLS), standard DB auth (no SAML yet), single node, seeded admin —
+the AWS phases close those gaps and stay gated on VUIT inputs. Two deploy paths keep it current —
+on-demand `make deploy` and auto-on-merge via a self-hosted runner — both snapshot DB+media first and
+never touch the named volumes or the live `.env`; see
+[runbooks/connor-server-deploy.md](runbooks/connor-server-deploy.md).
+
 - Anonymous gating, admin login, admin RBAC: **pass**. Edit/admin require login.
 - **Revision history** records every edit (3 revisions after create + 2 edits); diff + one-click restore.
 - **Media on the persistent volume**: attachments → `/config/www/files/`, images → `/config/www/uploads/images/`.
@@ -90,4 +100,5 @@ EFS auto-heal across instance replacement. Covered in the AWS verification secti
 [../terraform/README.md](../terraform/README.md) · [../deploy/local/README.md](../deploy/local/README.md) ·
 [brand/ccc-brand-guidelines.md](brand/ccc-brand-guidelines.md) (design language) ·
 [../deploy/branding/README.md](../deploy/branding/README.md) (apply + a11y validation) ·
+[runbooks/connor-server-deploy.md](runbooks/connor-server-deploy.md) (live Phase-0 deploy) ·
 runbooks in [runbooks/](runbooks/).

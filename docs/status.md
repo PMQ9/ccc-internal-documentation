@@ -1,6 +1,6 @@
 # Project status — CCC Internal Documentation (BookStack)
 
-> **Snapshot as of 2026-06-04.** This is a living tracker: what's done, the decisions made (and the
+> **Snapshot as of 2026-06-05.** This is a living tracker: what's done, the decisions made (and the
 > trade-offs accepted), what was *deliberately left open* and why, and the roadmap forward. For the
 > full design rationale read [architecture.md](architecture.md); for *how* to run things read
 > [../CLAUDE.md](../CLAUDE.md), [../README.md](../README.md), and the [runbooks](runbooks/).
@@ -9,12 +9,13 @@
 
 A self-hosted **BookStack** wiki for Vanderbilt's College of Connected Computing: read on VPN with no
 login, edit/admin via Vanderbilt SSO. Built in two shippable artifacts — a local validation stack and
-an AWS Terraform footprint — deployed in phases. **Phase 0 is validated green; Phases 1–3 are written
-and gated on VUIT (Vanderbilt IT) inputs**, not on engineering work.
+an AWS Terraform footprint — deployed in phases. **Phase 0 is validated green and now runs as a live,
+auto-deploying LAN instance; Phases 1–3 are written and gated on VUIT (Vanderbilt IT) inputs**, not on
+engineering work.
 
 | Phase | Scope | State |
 |---|---|---|
-| **0 — Local validation** | Docker Compose stack on `connor-server` | ✅ **Validated green** on BookStack `v26.05-ls265` |
+| **0 — Local validation + live LAN dev/staging** | Docker Compose stack on `connor-server` | ✅ **Validated green** on BookStack `v26.05-ls265`; now a **live, auto-deploying** LAN instance |
 | **1 — AWS apply (standard auth)** | Terraform footprint live, standard login | 🔲 Ready; `terraform validate`-clean, **not applied** — gated on VUIT |
 | **2 — SSO activation** | SAML2/Shibboleth login + break-glass | 🔲 Written; gated on Phase 1 + VUIT SP registration |
 | **3 — Production sign-off** | DR drill, alarms, WCAG 2.2 AA | 🔲 Written; gated on Phase 2 |
@@ -24,13 +25,16 @@ VUIT**, tracked in [runbooks/vuit-coordination-checklist.md](runbooks/vuit-coord
 
 ## What's done
 
-**Local validation stack — Phase 0 green** ([../deploy/local](../deploy/local), PR #1)
+**Local validation stack — Phase 0 green, now a live LAN instance** ([../deploy/local](../deploy/local), PR #1)
 Docker Compose BookStack + MariaDB on `connor-server`. The behavioral contract is validated on
 BookStack `v26.05-ls265` / MariaDB `11.4.12-r0-ls220`: anonymous read gating, admin login + RBAC,
 revision history with diff + one-click restore, media on the persistent volume, persistence across
 `docker compose down && up`, and the DB+media backup/restore drill. Checks V2/V6/V7/V9 are automated
 in [../deploy/local/verify.sh](../deploy/local/verify.sh); the rest are the manual checklist in
-[../deploy/local/README.md](../deploy/local/README.md).
+[../deploy/local/README.md](../deploy/local/README.md). Beyond a one-time validation, this is now an
+always-on dev/staging instance on the Vanderbilt LAN at `http://10.76.88.214`, holding real data (user
+accounts, pages, revisions, uploaded media) on persistent Docker named volumes. Still Phase 0: LAN-only,
+plain HTTP (no TLS), standard DB auth (no SAML), single node, seeded admin — **not production**.
 
 **AWS production footprint — validate-clean, not applied** ([../terraform](../terraform), PR #1)
 Flat root module, one file per concern (`network`/`compute`/`data`/`edge`/`iam`/`secrets`/
@@ -52,10 +56,20 @@ Real CCC logo lockup (not a placeholder), favicon, and a custom-head CSS layer a
 BookStack UI; design language and WCAG 2.2 AA criteria documented. Applied once per environment, not
 in code.
 
-**Architecture hardening + dev ergonomics** (PRs #6, #9)
+**Architecture hardening + dev ergonomics** (PRs #6, #9, #14)
 Pin-drift fitness gate ([../tests/lib/check_pins.sh](../tests/lib/check_pins.sh)), user-data contract
-gate, engineering conventions in [../CLAUDE.md](../CLAUDE.md), and a local `dev-up.sh` + VSCode run
-button.
+gate, engineering conventions in [../CLAUDE.md](../CLAUDE.md), a local `dev-up.sh` + VSCode run button,
+and on-demand `make deploy` (the "Deploy to connor-server (remote)" VSCode button) to push the working
+tree to the live instance.
+
+**Deploy automation to `connor-server`** ([../deploy/local/deploy-remote.sh](../deploy/local/deploy-remote.sh), [../.github/workflows/deploy.yml](../.github/workflows/deploy.yml), PR #14)
+Two validated deploy paths, both safe by construction. On-demand: `make deploy` rsyncs the working tree
+up, snapshots DB+media to `~/ccc-wiki-backups` first, relaunches via `dev-up.sh`, and runs `verify.sh`.
+Auto-on-merge (GitOps): `deploy.yml` runs on push to `main` via a self-hosted runner on `connor-server`,
+gated by repo Variable `DEPLOY_CONNOR_ENABLED=true`. Each deploy snapshots first, never overwrites the
+live `.env` (APP_KEY + DB creds), and never runs `down -v`, so named volumes persist. Deploy paths and
+runner labels are repo Variables, not hardcoded. Procedure in
+[runbooks/connor-server-deploy.md](runbooks/connor-server-deploy.md).
 
 ## Decisions made (and the trade-offs accepted)
 

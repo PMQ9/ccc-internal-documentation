@@ -30,7 +30,7 @@ restore. VPN reachability is enforced at the AWS network layer — see the [secu
 ## Repository layout
 
 ```
-deploy/local/     Local validation stack for connor-server (BookStack + MariaDB + verify.sh)
+deploy/local/     connor-server stack: BookStack + MariaDB, verify.sh, dev-up.sh, snapshot.sh, deploy-remote.sh
 terraform/        AWS production footprint (validated; apply is the AWS phase, gated on VUIT inputs)
 docs/architecture.md   Design, decisions, security note, validated findings
 docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SAML cert rotation, connor-server deploy
@@ -38,10 +38,16 @@ docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SA
 
 ## Status
 
-- **Phase 0 (local on connor-server): validated green.** Anonymous read gating, admin login + RBAC,
-  revision history (diff + restore), media on the persistent volume, persistence across restart, and
-  the DB+media backup/restore drill all pass on BookStack `v26.05-ls265`. See
-  [deploy/local/README.md](deploy/local/README.md).
+- **Phase 0 (connor-server): validated green AND now a live dev/staging instance.** Anonymous read
+  gating, admin login + RBAC, revision history (diff + restore), media on the persistent volume,
+  persistence across restart, and the DB+media backup/restore drill all pass on BookStack
+  `v26.05-ls265`. The stack now runs always-on on the Vanderbilt LAN at `http://10.76.88.214` with
+  real data (accounts, pages, revisions, media) on persistent Docker named volumes. Two deploy paths
+  are wired: on-demand `make deploy` from a laptop, and auto-on-merge to `main` via a self-hosted
+  runner on connor-server (each deploy snapshots DB+media first and never touches the live `.env` or
+  named volumes). Still **Phase 0**: LAN-only, plain HTTP, standard DB auth (no TLS/SAML yet), single
+  node, seeded admin — not production. See [deploy/local/README.md](deploy/local/README.md) and
+  [docs/runbooks/connor-server-deploy.md](docs/runbooks/connor-server-deploy.md).
 - **Phase 1+ (AWS): Terraform written and `terraform validate`-clean**, not yet applied. Applying is
   gated on VUIT inputs (VPN CIDRs, DNS/subdomain, TLS cert, SAML SP registration + attribute release).
   See [terraform/README.md](terraform/README.md) and
@@ -54,7 +60,18 @@ docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SA
 - **Editing the docs?** Expand an existing doc before adding a new one; keep it short and table-first;
   no emojis; log notable changes in the changelog. Full policy in [CLAUDE.md](CLAUDE.md#documentation).
 
-## Quick start (local test)
+## Quick start
+
+Deploy your working tree to the live connor-server instance (rsync + snapshot + relaunch + verify):
+
+```bash
+make deploy                 # or the VSCode "Deploy to connor-server (remote)" button
+```
+
+Merges to `main` auto-deploy the same way via the self-hosted runner. See
+[docs/runbooks/connor-server-deploy.md](docs/runbooks/connor-server-deploy.md).
+
+First-time / standalone bring-up on the host:
 
 ```bash
 ssh connor-server
