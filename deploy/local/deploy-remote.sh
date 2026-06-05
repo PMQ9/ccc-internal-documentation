@@ -11,7 +11,7 @@
 #   SKIP_SNAPSHOT=1 ./deploy-remote.sh   # skip the pre-deploy DB+media backup
 #   SKIP_VERIFY=1   ./deploy-remote.sh   # skip the post-deploy verify.sh smoke test
 #   NO_PULL=1       ./deploy-remote.sh   # don't `docker compose pull` (faster; no pin bump)
-#   REMOTE_HOST=other REMOTE_DIR=path ./deploy-remote.sh   # target a different host/dir
+#   REMOTE_HOST=other REMOTE_DIR=path BACKUP_DIR=dir ./deploy-remote.sh   # override host/dirs
 set -euo pipefail
 
 cd "$(dirname "$0")"            # deploy/local on the laptop
@@ -19,7 +19,7 @@ REPO_ROOT="$(cd ../.. && pwd)"  # rsync mirrors the FULL working tree
 
 REMOTE_HOST="${REMOTE_HOST:-connor-server}"
 REMOTE_DIR="${REMOTE_DIR:-ccc-wiki}"   # relative to the remote $HOME (tilde expands remotely)
-BACKUP_DIR="ccc-wiki-backups"          # remote, under $HOME — matches the prior drill's naming
+BACKUP_DIR="${BACKUP_DIR:-ccc-wiki-backups}"   # remote, under $HOME — matches the prior drill's naming
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10)
 
 # --- 1. preflight: SSH reachable (non-interactive) + docker present -----------

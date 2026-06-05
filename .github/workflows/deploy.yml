@@ -9,6 +9,13 @@ name: deploy (connor-server, self-hosted)
 #   1. Register a self-hosted runner on connor-server with labels: self-hosted,connor-server,ccc-wiki
 #   2. Settings -> Secrets and variables -> Actions -> Variables -> DEPLOY_CONNOR_ENABLED = true  (LAST)
 #
+# Repo Variables (Settings -> Secrets and variables -> Actions -> Variables) — hot-editable, all
+# optional with the defaults shown:
+#   DEPLOY_CONNOR_ENABLED  'true' to activate (default: inert/skipped)
+#   DEPLOY_LIVE_DIR        deploy path on the box      (default /home/connor/ccc-wiki)
+#   DEPLOY_BACKUP_DIR      snapshot dir on the box      (default /home/connor/ccc-wiki-backups)
+#   DEPLOY_RUNNER_LABELS   JSON array of runner labels  (default ["self-hosted","connor-server","ccc-wiki"])
+#
 # SECURITY: push-to-main only — NEVER add pull_request. The runner holds the live .env and a
 # Docker socket; running fork-PR code on it would be remote code execution.
 on:
@@ -26,12 +33,16 @@ concurrency:
 jobs:
   deploy:
     name: deploy -> connor-server
-    runs-on: [self-hosted, connor-server, ccc-wiki]
+    # Runner labels + deploy paths are repo Variables (hot-editable in the GitHub UI, no code
+    # change) with sensible defaults if unset — see docs/runbooks/connor-server-deploy.md.
+    # NB: DEPLOY_RUNNER_LABELS must match how the runner was registered (changing it requires
+    # re-registering the runner with the new labels).
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted","connor-server","ccc-wiki"]') }}
     if: ${{ vars.DEPLOY_CONNOR_ENABLED == 'true' }} # skipped (not pending) until activated
     timeout-minutes: 20
     env:
-      LIVE_DIR: /home/connor/ccc-wiki
-      BACKUP_DIR: /home/connor/ccc-wiki-backups
+      LIVE_DIR: ${{ vars.DEPLOY_LIVE_DIR || '/home/connor/ccc-wiki' }}
+      BACKUP_DIR: ${{ vars.DEPLOY_BACKUP_DIR || '/home/connor/ccc-wiki-backups' }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 

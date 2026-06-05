@@ -82,6 +82,22 @@ sudo ./svc.sh status            # expect active (running); runner shows "Idle" i
 Then **activate last**, after `svc.sh status` shows the runner Idle:
 Settings → Secrets and variables → Actions → Variables → **`DEPLOY_CONNOR_ENABLED` = `true`**.
 
+### Repo Variables (hot-editable in the GitHub UI, no code change)
+
+`deploy.yml` reads these from Settings → Secrets and variables → Actions → Variables. All are
+optional — unset falls back to the default — so nothing is hardcoded in the workflow:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DEPLOY_CONNOR_ENABLED` | _(unset → skipped)_ | `true` activates auto-deploy |
+| `DEPLOY_LIVE_DIR` | `/home/connor/ccc-wiki` | deploy path on the box (rsync target) |
+| `DEPLOY_BACKUP_DIR` | `/home/connor/ccc-wiki-backups` | snapshot dir on the box |
+| `DEPLOY_RUNNER_LABELS` | `["self-hosted","connor-server","ccc-wiki"]` | JSON array of `runs-on` labels |
+
+> `DEPLOY_RUNNER_LABELS` must match the labels the runner was **registered** with — changing it in
+> the UI alone won't move the job to a different runner unless that runner advertises the new labels.
+> The on-demand path mirrors these as env vars: `REMOTE_HOST`, `REMOTE_DIR`, `BACKUP_DIR`.
+
 > Do **not** add `deploy` to branch-protection required checks — a skipped job reports neutral,
 > which most "required" configs treat as not-passing, blocking merges while it's disabled. Only
 > `ci` gates merges; `deploy` stays advisory.
