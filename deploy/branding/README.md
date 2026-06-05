@@ -45,28 +45,39 @@ over the supported custom-head path.
 
 ## Apply procedure
 
-Do this on the local stack first (`connor-server`), confirm, then repeat on AWS after launch.
+The brand is **applied automatically** by [`apply-brand.sh`](../local/apply-brand.sh) on every deploy
+(and via `make apply-theme`). It is idempotent (writes a setting only when it differs) and the **repo
+is the source of truth** — a brand edit made in the BookStack UI is reverted on the next deploy. From
+this directory it sets:
 
-1. **App name** — already wired via `APP_NAME` (default `CCC Wiki`). Override in `.env` if desired.
-2. **Custom head (CSS + JS)** — **applied automatically.** Every deploy (and `make apply-theme`) runs
-   [`apply-head.sh`](../local/apply-head.sh), which writes [`ccc-custom-head.html`](./ccc-custom-head.html)
-   into the `app-custom-head` setting whenever it differs (idempotent; the file is the source of truth,
-   so a UI edit to the custom head is reverted on the next deploy). Manual fallback for an environment
-   without the deploy: Settings → Customization → **Custom HTML Head Content** → paste the file → Save.
-   Note: this file is **executable code**, not just CSS — it carries a `<script>` that runs as
-   first-party JS on every page (including login). Review changes to it like code; a merge auto-ships
-   it to every user. See the deploy runbook's
-   [security notes](../../docs/runbooks/connor-server-deploy.md#security-notes).
-3. **Primary color** — Settings → Customization → **Application primary color** → `#946E24` (Oak). The
-   CSS sets this too, but the setting also drives a few server-rendered spots, so set both.
-4. **Logo** — Settings → Customization → **Logo** → upload
-   [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg) (white text — pairs with the dark
-   header this theme sets). On a light header, use [`assets/ccc-logo.svg`](./assets/ccc-logo.svg)
-   instead. If your BookStack build rejects SVG uploads (some lock down SVG for security), export the
-   chosen file to a transparent PNG ~480 px wide and upload that.
-5. **Favicon** — Settings → Customization → **Favicon** → upload
-   [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) (the gold V), or a 32×32 PNG export of it.
-6. Hard-refresh (Cmd/Ctrl+Shift+R) and run the validation checklist below.
+| What | BookStack setting(s) | From |
+|---|---|---|
+| App name | `app-name` | the `APP_NAME` env (compose `.env`, default `CCC Wiki`) |
+| Custom head (CSS/JS theme + UX features) | `app-custom-head` | [`ccc-custom-head.html`](./ccc-custom-head.html) |
+| Primary color | `app-color` (+ light/dark tints) | CCC Oak `#946E24` |
+| Logo | `app-logo` | [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg), staged into the uploads volume |
+| Favicon | `app-icon` (+ 180/128/64/32) | [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) |
+
+`ccc-custom-head.html` is **executable code** (it carries a `<script>` that runs as first-party JS on
+every page, including login), not just CSS — review changes to it like code; a merge auto-ships it to
+every user. See the deploy runbook's
+[security notes](../../docs/runbooks/connor-server-deploy.md#security-notes).
+
+**Manual fallback** (an environment without the deploy, e.g. the first AWS bring-up): do each in
+Settings → Customization — paste `ccc-custom-head.html` into **Custom HTML Head Content**, set
+**Application primary color** to `#946E24`, and upload **Logo** =
+[`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg) (white text, for the dark header; use
+[`assets/ccc-logo.svg`](./assets/ccc-logo.svg) on a light header) and **Favicon** =
+[`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg). If your build rejects SVG uploads (some lock down
+SVG for security), export to a transparent PNG (~480 px logo / 32×32 favicon) and upload that. Then
+hard-refresh (Cmd/Ctrl+Shift+R) and run the validation checklist below.
+
+**Favicon note:** the logo and favicon are SVGs served as static files. The in-tab favicon works in
+every modern browser (they fetch by URL and honor the real `image/svg+xml` type). But BookStack
+hardcodes `type="image/png"` for the icon `<link>`s and the PWA manifest (and emits an
+`apple-touch-icon`), so the **installed-PWA / iOS home-screen icon is best-effort** and may fall back
+to a generic glyph. That's fine for this desktop/VPN wiki; if a crisp installed icon is ever needed,
+stage a PNG export of `ccc-favicon.svg` for the `app-icon*` settings.
 
 ## Light/dark mode behavior
 
