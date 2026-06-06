@@ -34,6 +34,7 @@ deploy/local/     connor-server stack: BookStack + MariaDB, verify.sh, dev-up.sh
 terraform/        AWS production footprint (validated; apply is the AWS phase, gated on VUIT inputs)
 docs/architecture.md   Design, decisions, security note, validated findings
 docs/runbooks/    VUIT coordination, break-glass admin, upgrades, DR restore, SAML cert rotation, connor-server deploy
+config/           Centralized config control panel: .env.example (secrets + per-env) + config.md (all non-secret knobs + how to apply)
 ```
 
 ## Status
