@@ -78,6 +78,7 @@ jobs:
           docker run --rm -v "$PWD":/work -w /work koalaman/shellcheck:v0.10.0 \
             --shell=bash --severity=warning \
             deploy/local/verify.sh deploy/local/dev-up.sh deploy/local/deploy-remote.sh deploy/local/snapshot.sh \
+            deploy/local/apply-brand.sh deploy/local/apply-agent-role.sh \
             tests/lib/common.sh tests/lib/render_user_data.sh \
             tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh tests/lib/check_theme_bridge.sh \
             tests/integration/run.sh tests/integration/helpers/load.bash user_data.rendered.sh
@@ -129,6 +130,16 @@ jobs:
         # error fails here first.
         run: |
           docker run --rm -v "$PWD":/work -w /work/services/contact golang:1.23-alpine sh -c '
+            test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
+            go vet ./...
+            apk add --no-cache gcc musl-dev >/dev/null
+            CGO_ENABLED=1 go test -race ./...'
+      - name: wiki client core checks (gofmt, vet, race tests)
+        # Mirrors `make wiki-client-test` (gofmt + vet + test on the pinned GO_IMG) and
+        # adds the race detector — CI installs the C toolchain the alpine image lacks.
+        # This is the shared client core (issue #27) the CLI (#28) and MCP server (#29) import.
+        run: |
+          docker run --rm -v "$PWD":/work -w /work/services/wiki-client golang:1.23-alpine sh -c '
             test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
             go vet ./...
             apk add --no-cache gcc musl-dev >/dev/null

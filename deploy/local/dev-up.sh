@@ -120,6 +120,16 @@ if [ "${SKIP_BRAND:-0}" != "1" ]; then
   bash apply-brand.sh || echo "::warning::brand not applied; live look unchanged (see above)" >&2
 fi
 
+# --- 4c. provision the least-privilege "Agent author" API role (config as code) ----
+# Agent API tokens (issue #27) map to a BookStack user whose ROLE is the authorization boundary, so
+# we keep that role in code: apply-agent-role.sh (re)creates it idempotently every deploy and the
+# repo is the source of truth (a role edit made in the UI is reverted next deploy). Best-effort like
+# the brand: the app is already healthy, so a hiccup warns rather than failing the deploy.
+# SKIP_AGENT_ROLE=1 opts out (e.g. testing bare upstream behavior).
+if [ "${SKIP_AGENT_ROLE:-0}" != "1" ]; then
+  bash apply-agent-role.sh || echo "::warning::Agent author role not applied (see above)" >&2
+fi
+
 # --- 5. open a browser (best-effort; suppress with NO_OPEN=1) ----------------
 if [ "${NO_OPEN:-0}" != "1" ]; then
   if command -v open > /dev/null 2>&1; then

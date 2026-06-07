@@ -189,12 +189,13 @@ Toggles for [dev-up.sh](../deploy/local/dev-up.sh) / [deploy-remote.sh](../deplo
 | `NO_OPEN` | `0` | `1` = do not open a browser (headless / CI). |
 | `--fresh` | off | Wipes volumes for a from-scratch deploy (**deletes local data**). |
 | `SKIP_BRAND` | `0` | `1` = skip applying the CCC brand (test bare upstream). |
+| `SKIP_AGENT_ROLE` | `0` | `1` = skip provisioning the least-privilege "Agent author" API role (test bare upstream). |
 | `SKIP_SNAPSHOT` | `0` | `1` = skip the pre-deploy DB+media backup (deploy-remote.sh). |
 | `SKIP_VERIFY` | `0` | `1` = skip the post-deploy smoke test (deploy-remote.sh). |
 | `NO_PULL` | `0` | `1` = do not pull images on remote deploy (faster; no pin bump). |
 | `BACKUP_DIR` | `$HOME/ccc-wiki-backups` | Snapshot output dir (snapshot.sh). |
 | `VOLUME` | `ccc-wiki_bookstack_config` | Docker named volume to archive (snapshot.sh). |
-| `BOOKSTACK_SERVICE` | `bookstack` | Compose service name (apply-brand.sh). |
+| `BOOKSTACK_SERVICE` | `bookstack` | Compose service name (apply-brand.sh, apply-agent-role.sh). |
 
 ## 3) GitHub Actions repo Variables — `gh variable set NAME --body "value"`
 
@@ -313,7 +314,7 @@ Add these knobs when the feature lands, so nothing gets hardcoded.
 | #19 | WAF on the ALB | rate-limit threshold (req/5min), managed rule-group selection |
 | #20 | Cost guardrails | monthly budget amount, alert thresholds (50/80/100%), notify email, cost-allocation tag set |
 | #21 | Audit log export | export S3 bucket name, retention days |
-| #27 | Agent write API | BookStack REST base URL, sanctioned endpoints, "Agent author" role name |
+| #27 | Agent write API — **shipped** (native BookStack REST + config-as-code role) | "Agent author" role provisioned by [`deploy/local/apply-agent-role.sh`](../deploy/local/apply-agent-role.sh) every deploy (`SKIP_AGENT_ROLE` in §2); base URL `<APP_URL>/api`; sanctioned endpoints + token lifecycle in [`docs/runbooks/agent-api.md`](../docs/runbooks/agent-api.md). Shared client core in `services/wiki-client/` (`WIKI_BASE_URL`/`WIKI_API_TOKEN`, see #28/#29 row). Rate-limit/audit deferred (follow-up). |
 | #28 / #29 | CLI + MCP client | API base URL + token via env/config (token never logged) |
 | #12 | Tag-gated deploy | release tag pattern (e.g. `v*.*.*`) that triggers the AWS image push |
 | #15 | Contact-page intake — **shipped** (`services/contact`) | Configured now via `deploy/local/.env` (§1b) + secrets in [.env.example](.env.example) §5. |
