@@ -143,8 +143,7 @@ repo (BookStack isn't running in CI), so it's a manual gate against the live ins
 - [ ] **Dark-mode contrast + no clash.** In dark mode the sidebars/panels are **dark** (not cream),
       links/accents are the lighter gold, primary buttons stay Oak with white labels, and the header
       stays black. Run axe/Lighthouse on a read page in dark mode: zero contrast violations. Spot-check
-      a sidebar (no light-on-cream), a content link, and a callout. (Known gap: Oak links on the *cream*
-      sidebar in **light** mode are ~4.2:1 — borderline; tracked in the brand guidelines §3.)
+      a sidebar (no light-on-cream), a content link, and a callout.
 - [ ] **One toggle.** The homepage no longer shows its own light/dark control; only the user-dropdown
       one remains. The Settings → Customization page is unaffected.
 - [ ] **Cross-port theme bridge (issue #39).** Pick Dark on the wiki, then open the contact page
