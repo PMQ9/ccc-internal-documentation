@@ -6,7 +6,9 @@
 #   app-custom-head        <- deploy/branding/ccc-custom-head.html      (CSS/JS theme + 4 UX features)
 #   app-logo               <- deploy/branding/assets/ccc-logo-reversed.svg  (staged into the volume)
 #   app-icon (+ 180/128/64/32) <- deploy/branding/assets/ccc-favicon.svg
-#   app-color (+ tints)    <- the CCC Oak palette (keep in sync with --ccc-gold-oak in the head file)
+#   app-color (+ tints)    <- CCC black #1C1C1C (the header bar). BookStack paints the header with
+#                             --color-primary AND strips our custom head on /settings/{category}
+#                             pages, so the header is black there only if the DB primary is (issue #40)
 #   app-name               <- APP_NAME from the environment, so the compose .env stays the source
 # It writes (and busts the cache) ONLY when something differs, so it is safe on every bring-up. The
 # repo is the source of truth: a brand edit made in the BookStack UI is reverted on the next run.
@@ -84,9 +86,14 @@ if ($head === false) {
         "app-icon-128"         => "/uploads/images/system/ccc-favicon.svg",
         "app-icon-64"          => "/uploads/images/system/ccc-favicon.svg",
         "app-icon-32"          => "/uploads/images/system/ccc-favicon.svg",
-        "app-color"            => "#946E24",
+        // --color-primary = CCC black: BookStack paints the header (.primary-background) with it, and
+        // strips our custom head on /settings/{category} pages (an upstream lockout guard), so the
+        // header is black THERE only if the DB primary is. The head re-points --color-primary back to
+        // Oak as the white-label button/accent surface on every other page (issue #40). Do NOT revert
+        // to Oak. The *-light tints stay the Oak accent tint (subtle selected/hover fills).
+        "app-color"            => "#1C1C1C",
         "app-color-light"      => "rgba(148,110,36,0.15)",
-        "app-color-dark"       => "#946E24",
+        "app-color-dark"       => "#1C1C1C",
         "app-color-light-dark" => "rgba(148,110,36,0.15)",
     ];
     $name = (string) config("app.name");

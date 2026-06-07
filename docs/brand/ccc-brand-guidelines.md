@@ -110,8 +110,9 @@ is intentionally dark in *both* modes. The page background in dark mode is `#111
 | White `#FFFFFF` | Flat Gold `#CFAE70` | **2.11 : 1** | ❌ FAIL — why `--color-primary` stays Oak, never a lighter gold |
 
 **The two rules that fall out:** in dark mode, link/accent **text** is Flat Gold (Oak drops to
-4.06 : 1 on `#111`); and the primary color **stays Oak** because BookStack uses it as a *button
-background* with a white label — white on a lighter gold is 2.11 : 1.
+4.06 : 1 on `#111`); and the theme's `--color-primary` **stays Oak** wherever our head loads, because
+BookStack uses it as a *button background* with a white label — white on a lighter gold is 2.11 : 1.
+(The *DB* `app-color` is **black**, not Oak — see the mapping table in §7 for why.)
 
 > **Known light-mode gap (tracked, not yet fixed):** Oak link text on the **cream** chrome `#F5F3EF`
 > is ~4.20 : 1 and on the `#F2F2F2` page gutter ~4.15 : 1 — both just under AA. The rule above
@@ -212,9 +213,9 @@ maps to a BookStack CSS variable or a stable selector.
 
 | Surface | Decision | Token / mechanism |
 |---|---|---|
-| **Primary color** (buttons) | Oak `#946E24` — passes AA as a white-label button in **both** modes | Settings → primary color **and** `--color-primary` (kept Oak in dark) |
+| **Primary color** | DB `app-color` = **black `#1C1C1C`** (BookStack paints the header with it; needed on `/settings/{category}` pages that strip our head — issue #40). The theme re-points `--color-primary` to **Oak `#946E24`** as the white-label button/accent surface (AA both modes) wherever the head loads | `app-color` (black) + `--color-primary` (Oak via Tier 3) |
 | **Links / accent text** | Oak `#946E24` light, Flat Gold `#CFAE70` dark, **always underlined** in content | `--ccc-link` → `--color-link` + `.page-content a` underline |
-| **Header / top bar** | Vanderbilt-signature **black `#1C1C1C` bar, white text, thin gold accent rule** (both modes) | `.primary-background` override |
+| **Header / top bar** | Vanderbilt-signature **black `#1C1C1C` bar, white text, thin gold accent rule** (both modes) | `.primary-background` override **+** black DB `app-color` (the gold rule is the only part the `/settings/{category}` pages miss) |
 | **App chrome / sidebars** | Cream `#F5F3EF` in light; transparent in dark (BookStack's `#111` shows through) | `--ccc-chrome-surface` |
 | **Body text** | Black `#1C1C1C` on white content | inherited |
 | **Accent / active states** | Highlight `#ECB748` or Flat Gold `#CFAE70` with **black** text | badges, active nav, callouts |

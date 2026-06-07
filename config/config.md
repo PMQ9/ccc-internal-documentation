@@ -283,8 +283,8 @@ re-applies these on every deploy and **overwrites live UI brand edits**. See
 
 | Token | Value | Notes |
 |---|---|---|
-| App color (CCC Oak) | `#946E24` | `app-color` / `app-color-dark` in apply-brand.sh. **Keep in sync** with the CSS token `--ccc-gold-oak` in [ccc-custom-head.html](../deploy/branding/ccc-custom-head.html). |
-| App color tint | `rgba(148,110,36,0.15)` | `app-color-light` / `app-color-light-dark`. |
+| App color (CCC black) | `#1C1C1C` | `app-color` / `app-color-dark` in apply-brand.sh. Black because BookStack paints the header with it and strips the custom head on `/settings/{category}` pages (issue #40); the head re-points `--color-primary` to Oak (`--ccc-gold-oak`) for buttons elsewhere. |
+| App color tint | `rgba(148,110,36,0.15)` | `app-color-light` / `app-color-light-dark` — the Oak accent tint (subtle selected/hover fills). |
 | App name | `CCC Wiki` | From `APP_NAME` (§1); apply-brand.sh tracks it. |
 | Logo / favicon | `assets/ccc-logo-reversed.svg`, `ccc-favicon.svg` | Override paths via `HEAD_FILE` / `LOGO_FILE` / `FAVICON_FILE`. |
 

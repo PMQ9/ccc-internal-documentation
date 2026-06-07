@@ -54,7 +54,7 @@ this directory it sets:
 |---|---|---|
 | App name | `app-name` | the `APP_NAME` env (compose `.env`, default `CCC Wiki`) |
 | Custom head (CSS/JS theme + UX features) | `app-custom-head` | [`ccc-custom-head.html`](./ccc-custom-head.html) |
-| Primary color | `app-color` (+ light/dark tints) | CCC Oak `#946E24` |
+| Primary color | `app-color` (+ light/dark tints) | CCC black `#1C1C1C` (BookStack paints the header with it; the head re-points `--color-primary` to Oak for buttons — issue #40) |
 | Logo | `app-logo` | [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg), staged into the uploads volume |
 | Favicon | `app-icon` (+ 180/128/64/32) | [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) |
 
@@ -65,7 +65,8 @@ every user. See the deploy runbook's
 
 **Manual fallback** (an environment without the deploy, e.g. the first AWS bring-up): do each in
 Settings → Customization — paste `ccc-custom-head.html` into **Custom HTML Head Content**, set
-**Application primary color** to `#946E24`, and upload **Logo** =
+**Application primary color** to `#1C1C1C` (black — so the header is correct on the `/settings/*`
+pages that strip the custom head; the head re-paints buttons Oak elsewhere), and upload **Logo** =
 [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg) (white text, for the dark header; use
 [`assets/ccc-logo.svg`](./assets/ccc-logo.svg) on a light header) and **Favicon** =
 [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg). If your build rejects SVG uploads (some lock down
