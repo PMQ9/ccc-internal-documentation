@@ -222,3 +222,40 @@ func TestRejectsMalformedToken(t *testing.T) {
 		t.Errorf("validation error must not echo the token value: %q", err.Error())
 	}
 }
+
+// New must normalize a trailing slash on BaseURL even when a consumer constructs
+// Config directly (not via Load) — otherwise baseURL+path yields a double slash.
+func TestNewNormalizesTrailingSlash(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"id":7}`))
+	}))
+	defer srv.Close()
+
+	c, err := New(Config{BaseURL: srv.URL + "/", Token: testToken, MaxRetries: 0})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := c.GetPage(context.Background(), 7); err != nil {
+		t.Fatalf("GetPage: %v", err)
+	}
+	if gotPath != "/api/pages/7" {
+		t.Errorf("path = %q, want /api/pages/7 (trailing slash not normalized -> double slash)", gotPath)
+	}
+}
+
+// Load must fail loud on a present-but-malformed WIKI_* value rather than silently
+// falling back to the default.
+func TestLoadRejectsBadEnvValue(t *testing.T) {
+	t.Setenv("WIKI_BASE_URL", "http://x")
+	t.Setenv("WIKI_API_TOKEN", "id:secret")
+	t.Setenv("WIKI_HTTP_TIMEOUT", "nope")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected an error for a malformed WIKI_HTTP_TIMEOUT")
+	}
+	if !strings.Contains(err.Error(), "WIKI_HTTP_TIMEOUT") {
+		t.Errorf("error should name the offending variable: %v", err)
+	}
+}

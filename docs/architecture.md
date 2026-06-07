@@ -110,6 +110,9 @@ server (#29), which import a shared Go client core ([../services/wiki-client/](.
 - **Sanctioned endpoints (write):** `POST/PUT` on `/api/pages`, `/api/books`, `/api/chapters`,
   `POST /api/attachments`, `POST /api/image-gallery`; read via the matching `GET`s. Not sanctioned
   for agents (the role can't reach them anyway): any `DELETE`, `/api/users`, `/api/roles`, settings.
+  This is the **role/API** surface; the Go client core currently implements books + pages
+  (read/create/update), with chapters/attachments/images reachable via the role + raw API until a
+  consumer (#28/#29) needs typed methods.
 - **Token lifecycle is MANUAL** (the role is code; tokens are not): a human issues one short-lived
   token per agent against an Agent-author user, and rotates/revokes it in the UI — see the runbook.
 - **Access posture:** deny-by-default, LAN-only (Phase 0) / on-VPN (prod), same SG/VPN gate as the

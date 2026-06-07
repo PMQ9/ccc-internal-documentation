@@ -52,8 +52,10 @@ type Attachment struct {
 	ID         int64  `json:"id,omitempty"`
 	Name       string `json:"name"`
 	UploadedTo int64  `json:"uploaded_to,omitempty"` // page id
-	External   bool   `json:"external,omitempty"`
-	Order      int    `json:"order,omitempty"`
+	// No omitempty: false is the meaningful "this is an uploaded file, not a link"
+	// value, and omitempty would drop it from the request body.
+	External bool `json:"external"`
+	Order    int  `json:"order,omitempty"`
 }
 
 // Image is a gallery or drawio image. (Model only in this scaffold.)

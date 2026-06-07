@@ -28,33 +28,50 @@ func env(k, def string) string {
 	return def
 }
 
-func envInt(k string, def int) int {
-	if v := os.Getenv(k); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
+// envInt / envDuration return the default when the variable is unset, but a value
+// that is PRESENT-but-unparseable is a typo the operator should hear about — they
+// record it in errs (and still return the default) so Load can fail loud rather
+// than silently run with a setting the user thinks they changed.
+func envInt(k string, def int, errs *[]string) int {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
 	}
-	return def
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		*errs = append(*errs, fmt.Sprintf("%s=%q is not an integer", k, v))
+		return def
+	}
+	return n
 }
 
-func envDuration(k string, def time.Duration) time.Duration {
-	if v := os.Getenv(k); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
+func envDuration(k string, def time.Duration, errs *[]string) time.Duration {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
 	}
-	return def
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		*errs = append(*errs, fmt.Sprintf("%s=%q is not a duration (e.g. 15s, 200ms)", k, v))
+		return def
+	}
+	return d
 }
 
 // Load reads configuration from the environment and validates the parts that must
-// be coherent to make a request at all. It does NOT make a network call.
+// be coherent to make a request at all. It does NOT make a network call. A present
+// but malformed WIKI_* value is an error, not a silent fallback to the default.
 func Load() (Config, error) {
+	var errs []string
 	c := Config{
 		BaseURL:        strings.TrimRight(env("WIKI_BASE_URL", ""), "/"),
 		Token:          os.Getenv("WIKI_API_TOKEN"),
-		HTTPTimeout:    envDuration("WIKI_HTTP_TIMEOUT", 15*time.Second),
-		MaxRetries:     envInt("WIKI_MAX_RETRIES", 3),
-		RetryBaseDelay: envDuration("WIKI_RETRY_BASE_DELAY", 200*time.Millisecond),
+		HTTPTimeout:    envDuration("WIKI_HTTP_TIMEOUT", 15*time.Second, &errs),
+		MaxRetries:     envInt("WIKI_MAX_RETRIES", 3, &errs),
+		RetryBaseDelay: envDuration("WIKI_RETRY_BASE_DELAY", 200*time.Millisecond, &errs),
+	}
+	if len(errs) > 0 {
+		return c, fmt.Errorf("invalid WIKI_* configuration: %s", strings.Join(errs, "; "))
 	}
 	return c, c.validate()
 }

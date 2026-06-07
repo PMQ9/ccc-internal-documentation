@@ -30,3 +30,10 @@ func (c *Client) CreateBook(ctx context.Context, in Book) (Book, error) {
 	err := c.do(ctx, http.MethodPost, "/api/books", in, &b)
 	return b, err
 }
+
+// UpdateBook updates a book by id (PUT — idempotent) and returns it as stored.
+func (c *Client) UpdateBook(ctx context.Context, id int64, in Book) (Book, error) {
+	var b Book
+	err := c.do(ctx, http.MethodPut, fmt.Sprintf("/api/books/%d", id), in, &b)
+	return b, err
+}

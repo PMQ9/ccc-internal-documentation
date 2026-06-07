@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -50,7 +51,10 @@ func New(cfg Config, opts ...Option) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{
-		baseURL:    cfg.BaseURL,
+		// Normalize here, not only in Load(): Config/New are exported so #28/#29 can
+		// build a Config straight from flags, and a trailing slash would yield
+		// "host//api/..." (some proxies 404 on the double slash).
+		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
 		token:      cfg.Token,
 		httpc:      &http.Client{Timeout: cfg.HTTPTimeout},
 		maxRetries: cfg.MaxRetries,
@@ -114,7 +118,11 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 			continue
 		}
 
-		// Read + close the body so the connection can be reused.
+		// Read + close the body so the connection can be reused. The read error is
+		// intentionally ignored: a partial/truncated body surfaces below as a decode
+		// failure on 2xx (not retried) and the cap bounds a pathological response. Both
+		// are fine at current scale (lists aren't paginated; BookStack returns ~100
+		// items); revisit when count/offset pagination lands.
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxRespBody))
 		_ = resp.Body.Close()
 

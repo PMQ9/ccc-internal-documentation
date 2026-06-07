@@ -62,8 +62,16 @@ have lychee "$(mk_img LYCHEE_IMG)" "$WEEKLY"
 # service Dockerfile build stage; each go.mod `go` directive must name the same
 # minor. All of them agreeing is the exact drift this gate exists to catch. (issues #43, #27)
 go_img="$(mk_img GO_IMG)" # e.g. golang:1.23-alpine
-have go "$go_img" "$CI"
 have go "$go_img" "$DOCKERFILE"
+# CI has multiple hardcoded Go steps (contact + wiki-client). `have` (grep -qF) only proves >=1
+# match, so a partial bump that updates one step but not the other would slip through. Assert the
+# SET of distinct golang: images in CI is exactly the pinned one — no divergent tag anywhere.
+ci_go_tags="$(grep -oE 'golang:[A-Za-z0-9._-]+' "$CI" | sort -u)"
+if [ "$ci_go_tags" = "$go_img" ]; then
+  note "every golang: image in ci.yml == GO_IMG ($go_img)"
+else
+  bad "ci.yml has a golang: image != GO_IMG ($go_img): $(echo "$ci_go_tags" | tr '\n' ' ')"
+fi
 go_ver="${go_img#golang:}"
 go_ver="${go_ver%-*}" # golang:1.23-alpine -> 1.23
 go_re="${go_ver//./\\.}"
