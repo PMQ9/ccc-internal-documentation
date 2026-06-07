@@ -58,6 +58,7 @@ mh_hdr() { curl -s "$MH_BASE/api/v2/messages" | jq -r ".items[0].Content.Headers
   assert_contains "$body" 'name="_csrf"' "form must carry a CSRF field"
   assert_contains "$body" 'name="website"' "form must carry the honeypot field"
   assert_contains "$body" "Bug report" "form must list the submission types"
+  assert_contains "$body" "Back to the wiki" "form must link back to the wiki (CONTACT_WIKI_URL)"
 }
 
 @test "T-020 valid submission delivers a structured email" {

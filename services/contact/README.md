@@ -30,6 +30,7 @@ third-party dependencies, so the image is tiny and the CVE surface minimal.
 | `MAIL_FROM_ADDRESS` | — | `From:` — a sender you can authenticate as, e.g. a Gmail (`cccwiki.contact@gmail.com`); for Gmail it must equal `MAIL_USERNAME` |
 | `MAIL_FROM_NAME` | `CCC Wiki Contact` | `From:` display name |
 | `CONTACT_WIKI_NAME` | `CCC Wiki` | shown on the form + in the subject prefix |
+| `CONTACT_WIKI_URL` | _(empty)_ | wiki base URL; powers the masthead logo "home" link + the "Back to the wiki" link. Empty = brand renders non-interactively. The reverse of `CONTACT_URL` (which links the wiki header _at_ this form). Defaults to `APP_URL` in compose. |
 | `CONTACT_ALLOWED_EMAIL_DOMAIN` | _(empty = any)_ | required submitter domain, e.g. `vanderbilt.edu` |
 | `CONTACT_ALLOWED_SENDERS` | _(empty)_ | optional comma-list of exact addresses (overrides the domain) |
 | `MAIL_TRANSPORT` | `smtp` | `agentmail` (recommended), `smtp` (Gmail/Brevo/SES), or `graph` (M365 send-as) |

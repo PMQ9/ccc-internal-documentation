@@ -11,6 +11,11 @@ take it to AWS.
   link is injected into the wiki header by [`apply-brand.sh`](../../deploy/local/apply-brand.sh).
 - **Config:** non-secret knobs in [`config/config.md`](../../config/config.md) §1b;
   secrets in [`config/.env.example`](../../config/.env.example) §5 / `deploy/local/.env`.
+- **Look + return path:** the page is a styled **look-alike** of the wiki (same black
+  masthead, gold-flat rule, CCC lockup, "CCC Wiki" name, favicon) — not a
+  BookStack-native page (cross-origin + `<form>` sanitization make native embedding
+  infeasible; issue #38). Its logo and a "Back to the wiki" link point at
+  `CONTACT_WIKI_URL` (defaults to `APP_URL`). Light/dark parity is tracked in #39.
 
 ## How it works
 

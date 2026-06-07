@@ -25,6 +25,7 @@ services:
       - MAIL_FROM_ADDRESS=cccwiki.contact@gmail.com
       - MAIL_FROM_NAME=CCC Wiki Contact
       - CONTACT_WIKI_NAME=CCC Wiki
+      - CONTACT_WIKI_URL=http://wiki.test
       - CONTACT_ALLOWED_EMAIL_DOMAIN=vanderbilt.edu
       - MAIL_TRANSPORT=smtp
       - MAIL_HOST=mailhog

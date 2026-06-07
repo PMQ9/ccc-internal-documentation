@@ -29,7 +29,8 @@ func (f *fakeMailer) Send(_ context.Context, m *Message) error {
 func testConfig() *Config {
 	return &Config{
 		Listen: ":0", Recipient: "dest@example.org", FromAddress: "from@proton.test",
-		FromName: "CCC Wiki Contact", WikiName: "CCC Wiki", AllowedDomain: "vanderbilt.edu",
+		FromName: "CCC Wiki Contact", WikiName: "CCC Wiki", WikiURL: "http://wiki.test",
+		AllowedDomain: "vanderbilt.edu",
 		Transport: "smtp", SMTPHost: "smtp.test", SMTPPort: 587, SMTPEncryption: "starttls",
 		GitHubAPIBase: "https://api.github.com", RateLimitPerHour: 5,
 	}
@@ -97,6 +98,48 @@ func TestFormGET(t *testing.T) {
 	}
 }
 
+// The masthead must brand the page like the wiki AND give a way back: the inlined
+// CCC lockup + a "Back to the wiki" link, both pointing at CONTACT_WIKI_URL.
+func TestMastheadLinksHome(t *testing.T) {
+	s, _ := newTestServer(t, testConfig())
+	req := httptest.NewRequest(http.MethodGet, "/contact", nil)
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`href="http://wiki.test"`,        // logo home link + the back link target
+		"Back to the wiki",               // the explicit return link
+		"College of Connected Computing", // the inlined CCC lockup actually rendered
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("masthead missing %q", want)
+		}
+	}
+}
+
+// With no wiki URL configured we must not emit a dead href="" — the brand still
+// renders, just not as a link, and the back link is omitted.
+func TestMastheadNoLinkWhenUnset(t *testing.T) {
+	cfg := testConfig()
+	cfg.WikiURL = ""
+	s, _ := newTestServer(t, cfg)
+	req := httptest.NewRequest(http.MethodGet, "/contact", nil)
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if strings.Contains(body, `href=""`) {
+		t.Error("emitted an empty href when WikiURL is unset")
+	}
+	if strings.Contains(body, "Back to the wiki") {
+		t.Error("back link should be omitted when WikiURL is unset")
+	}
+	if !strings.Contains(body, "College of Connected Computing") {
+		t.Error("brand lockup should still render when WikiURL is unset")
+	}
+}
+
 func TestSubmitHappyPath(t *testing.T) {
 	s, fm := newTestServer(t, testConfig())
 	rec := post(s, validVals(), true)
@@ -122,6 +165,10 @@ func TestSubmitHappyPath(t *testing.T) {
 	}
 	if m.Headers["X-CCC-Contact-Type"] != "bug" {
 		t.Errorf("X-CCC-Contact-Type = %q", m.Headers["X-CCC-Contact-Type"])
+	}
+	// The success page carries the same masthead + path back (newSuccessView wires it).
+	if body := rec.Body.String(); !strings.Contains(body, "Back to the wiki") {
+		t.Error("success page missing the back-to-wiki link")
 	}
 }
 

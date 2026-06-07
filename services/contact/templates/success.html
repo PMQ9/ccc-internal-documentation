@@ -12,21 +12,23 @@
     }
     body { margin: 0; background: var(--chrome); color: var(--ink);
            font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    header { background: #1c1c1c; color: #fff; padding: 16px 20px; border-bottom: 3px solid var(--oak); }
-    header h1 { margin: 0; font: 600 18px/1.3 Georgia, "Times New Roman", serif; }
+    /* Masthead (black bar + gold rule + logo) is the shared "masthead" template. */
     main { max-width: 640px; margin: 24px auto; padding: 0 16px; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    .card h1 { margin: 0 0 8px; font: 600 24px/1.25 Georgia, "Times New Roman", "Source Serif Pro", serif; }
     a { color: var(--oak); }
     .muted { color: var(--muted); }
     .btn { display: inline-block; margin-top: 16px; background: var(--oak); color: #fff;
            text-decoration: none; border-radius: 6px; padding: 10px 18px; font-weight: 600; }
+    .btn:hover { background: #7d5d1e; }
   </style>
+  {{template "brand-head" .}}
 </head>
 <body>
-  <header><h1>{{.WikiName}} — Contact / Feedback</h1></header>
+  {{template "masthead" .}}
   <main>
     <div class="card">
-      <h2>Thanks — your message is on its way.</h2>
+      <h1>Thanks — your message is on its way.</h1>
       <p>We've sent it to the CCC admin team{{if .IssueURL}} and opened a tracking issue{{end}}. We'll follow up by email if needed.</p>
       {{if .IssueURL}}<p class="muted">Tracking issue: <a href="{{.IssueURL}}" rel="noopener noreferrer">{{.IssueURL}}</a></p>{{end}}
       <a class="btn" href="/contact">Send another</a>

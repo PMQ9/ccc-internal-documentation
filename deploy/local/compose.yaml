@@ -95,6 +95,10 @@ services:
       - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-}
       - MAIL_FROM_NAME=${MAIL_FROM_NAME:-CCC Wiki Contact}
       - CONTACT_WIKI_NAME=${APP_NAME:-CCC Wiki}
+      # Reverse link: the contact page's logo + "Back to the wiki" point here. Defaults
+      # to the wiki's own base URL (APP_URL). This is the inverse of CONTACT_URL above,
+      # which links the WIKI header AT this form.
+      - CONTACT_WIKI_URL=${CONTACT_WIKI_URL:-$APP_URL}
       - CONTACT_ALLOWED_EMAIL_DOMAIN=${CONTACT_ALLOWED_EMAIL_DOMAIN:-vanderbilt.edu}
       - CONTACT_ALLOWED_SENDERS=${CONTACT_ALLOWED_SENDERS:-}
       - MAIL_TRANSPORT=${MAIL_TRANSPORT:-smtp}

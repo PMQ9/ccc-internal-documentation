@@ -36,7 +36,7 @@ type server struct {
 }
 
 func newServer(cfg *Config, log *slog.Logger) (*server, error) {
-	html, err := htmltemplate.ParseFS(templatesFS, "templates/form.html", "templates/success.html")
+	html, err := htmltemplate.ParseFS(templatesFS, "templates/layout.html", "templates/form.html", "templates/success.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse html templates: %w", err)
 	}
@@ -136,7 +136,7 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	// don't learn they were caught; send nothing.
 	if strings.TrimSpace(r.PostFormValue(honeypotField)) != "" {
 		s.log.Warn("contact honeypot tripped", "ip", ip)
-		s.renderSuccess(w, successView{WikiName: s.cfg.WikiName, Recipient: s.cfg.Recipient})
+		s.renderSuccess(w, s.newSuccessView(""))
 		return
 	}
 
@@ -184,7 +184,7 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.renderSuccess(w, successView{WikiName: s.cfg.WikiName, Recipient: s.cfg.Recipient, IssueURL: issueURL})
+	s.renderSuccess(w, s.newSuccessView(issueURL))
 }
 
 // ---- CSRF (stateless double-submit cookie) --------------------------------
@@ -239,6 +239,7 @@ func (s *server) clientIP(r *http.Request) string {
 
 type formView struct {
 	WikiName      string
+	WikiURL       string
 	CSRFToken     string
 	Honeypot      string
 	Kinds         []kindOption
@@ -252,6 +253,7 @@ type formView struct {
 
 type successView struct {
 	WikiName  string
+	WikiURL   string
 	Recipient string
 	IssueURL  string
 }
@@ -259,6 +261,7 @@ type successView struct {
 func (s *server) newFormView(w http.ResponseWriter, values, errs map[string]string, general string) formView {
 	return formView{
 		WikiName:      s.cfg.WikiName,
+		WikiURL:       s.cfg.WikiURL,
 		CSRFToken:     s.issueCSRF(w),
 		Honeypot:      honeypotField,
 		Kinds:         kindOptions(),
@@ -273,6 +276,18 @@ func (s *server) newFormView(w http.ResponseWriter, values, errs map[string]stri
 
 func (s *server) renderForm(w http.ResponseWriter, status int, v formView) {
 	s.renderHTML(w, status, "form.html", v)
+}
+
+// newSuccessView builds the success view with the brand fields filled in. Both
+// success paths (honeypot decoy + real send) go through here so neither can ship
+// the masthead without the "home"/"back to the wiki" links.
+func (s *server) newSuccessView(issueURL string) successView {
+	return successView{
+		WikiName:  s.cfg.WikiName,
+		WikiURL:   s.cfg.WikiURL,
+		Recipient: s.cfg.Recipient,
+		IssueURL:  issueURL,
+	}
 }
 
 func (s *server) renderSuccess(w http.ResponseWriter, v successView) {

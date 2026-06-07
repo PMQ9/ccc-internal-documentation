@@ -22,6 +22,10 @@ type Config struct {
 	FromAddress string // From: — a sender you can authenticate as, e.g. ccc.vanderbilt.admin@proton.me
 	FromName    string // From: display name
 	WikiName    string // shown in the form heading + the subject prefix
+	WikiURL     string // base URL of the wiki this form belongs to; powers the masthead
+	// logo "home" link + the "Back to the wiki" link. Empty = render the brand
+	// non-interactively (no link). This is the REVERSE of CONTACT_URL (which links
+	// the wiki header AT this form); see deploy/local/.env.example.
 
 	// Approved-sender policy (the "whitelist"). With no list and no domain, any
 	// well-formed address is accepted (still behind VPN + login-gated link).
@@ -97,6 +101,7 @@ func Load() (*Config, error) {
 		FromAddress:       os.Getenv("MAIL_FROM_ADDRESS"),
 		FromName:          env("MAIL_FROM_NAME", "CCC Wiki Contact"),
 		WikiName:          env("CONTACT_WIKI_NAME", "CCC Wiki"),
+		WikiURL:           strings.TrimRight(env("CONTACT_WIKI_URL", ""), "/"),
 		AllowedDomain:     os.Getenv("CONTACT_ALLOWED_EMAIL_DOMAIN"),
 		Transport:         env("MAIL_TRANSPORT", "smtp"),
 		SMTPHost:          os.Getenv("MAIL_HOST"),
