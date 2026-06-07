@@ -19,7 +19,7 @@ RENDER="$ROOT/tests/lib/render_user_data.sh"
 VARS="$ROOT/terraform/variables.tf"
 TFTPL="$ROOT/terraform/user-data.sh.tftpl"
 DOCKERFILE="$ROOT/services/contact/Dockerfile"
-GOMOD="$ROOT/services/contact/go.mod"
+GOMODS=("$ROOT/services/contact/go.mod" "$ROOT/services/wiki-client/go.mod")
 
 fail=0
 note() { echo "  ok: $1"; }
@@ -58,20 +58,23 @@ have gitleaks "$(mk_img GITLEAKS_IMG)" "$CI"
 have lychee "$(mk_img LYCHEE_IMG)" "$CI"
 have lychee "$(mk_img LYCHEE_IMG)" "$WEEKLY"
 
-# go toolchain image: canonical in the Makefile, mirrored in CI's contact step and
-# the service Dockerfile build stage; the go.mod `go` directive must name the same
-# minor. All four agreeing is the exact drift this gate exists to catch. (issue #43)
+# go toolchain image: canonical in the Makefile, mirrored in CI's go steps and the
+# service Dockerfile build stage; each go.mod `go` directive must name the same
+# minor. All of them agreeing is the exact drift this gate exists to catch. (issues #43, #27)
 go_img="$(mk_img GO_IMG)" # e.g. golang:1.23-alpine
 have go "$go_img" "$CI"
 have go "$go_img" "$DOCKERFILE"
 go_ver="${go_img#golang:}"
 go_ver="${go_ver%-*}" # golang:1.23-alpine -> 1.23
 go_re="${go_ver//./\\.}"
-if grep -qE "^go[[:space:]]+${go_re}([.[:space:]]|$)" "$GOMOD"; then
-  note "go.mod go directive ($go_ver) matches GO_IMG"
-else
-  bad "go.mod go directive != GO_IMG ($go_ver)"
-fi
+for gomod in "${GOMODS[@]}"; do
+  rel="services/${gomod#*/services/}"
+  if grep -qE "^go[[:space:]]+${go_re}([.[:space:]]|$)" "$gomod"; then
+    note "$rel go directive ($go_ver) matches GO_IMG"
+  else
+    bad "$rel go directive != GO_IMG ($go_ver)"
+  fi
+done
 
 # terraform + tflint install via setup-* actions with a BARE version token (not image:tag), so
 # compare the version, not the whole image string. (terraform is triplicated: Makefile, ci, tf-plan.)

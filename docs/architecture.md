@@ -91,6 +91,38 @@ recipient** (never an open relay).
 - **Proxy:** `APP_PROXIES` = ALB subnet CIDRs (never `*` behind an IP-allowlisted public ALB).
 - **Revisions:** `REVISION_LIMIT=false` (indefinite) — reconcile with any VU records-retention policy.
 
+## Headless agent API (the load-bearing bits)
+
+Sanctioned headless writes (faculty/staff agents, scripts, CI) ride BookStack's **built-in** REST
+API — there is no gateway service. The agent API is config-as-code + this section + the runbook
+([runbooks/agent-api.md](runbooks/agent-api.md)). It is the foundation for the CLI (#28) and the MCP
+server (#29), which import a shared Go client core ([../services/wiki-client/](../services/wiki-client/)).
+
+- **Base URL / auth:** `<APP_URL>/api/...`; token auth via the header `Authorization: Token <id>:<secret>`
+  (not a bearer JWT). A token belongs to a **user**, and that user's **role** is the authorization
+  boundary — the same RBAC path the UI uses, via a different front door.
+- **Agent author role** (least privilege, config-as-code): [../deploy/local/apply-agent-role.sh](../deploy/local/apply-agent-role.sh)
+  grants exactly `access-api` + view/create/update on books/chapters/pages + image/attachment
+  create — **no delete, no shelf access, no settings/users/roles management**. It re-applies every
+  deploy via `sync()` (the grant is made to *equal* the allowlist), so a permission added in the UI
+  is pruned next deploy. Verified on v26.05: a token on this role gets 2xx on create/update and
+  **403 on every delete** and on `/api/users`.
+- **Sanctioned endpoints (write):** `POST/PUT` on `/api/pages`, `/api/books`, `/api/chapters`,
+  `POST /api/attachments`, `POST /api/image-gallery`; read via the matching `GET`s. Not sanctioned
+  for agents (the role can't reach them anyway): any `DELETE`, `/api/users`, `/api/roles`, settings.
+- **Token lifecycle is MANUAL** (the role is code; tokens are not): a human issues one short-lived
+  token per agent against an Agent-author user, and rotates/revokes it in the UI — see the runbook.
+- **Access posture:** deny-by-default, LAN-only (Phase 0) / on-VPN (prod), same SG/VPN gate as the
+  UI. `/api` is not separately exposed; an off-VPN client can't reach it any more than it can reach `/`.
+- **Honest framing.** Every API write produces a `page_revisions` row (same as the UI — validated by
+  the integration suite), and uploaded media lands on the persistent volume; the v26.05 unified
+  `entities`/`entity_page_data` schema is respected because writes go through the app, not the DB.
+  **Rate-limiting and per-request audit logging are deferred** (v26.05 has no API rate-limit knob;
+  access is already LAN/VPN deny-by-default). The residual risk is honest: a write-capable token that
+  leaks can vandalize content *within the role's scope* until revoked — **mitigated** by revision
+  history (reversible) + manual revoke + the network gate, **not prevented**. See the tracked
+  cybersecurity-checklist follow-up.
+
 ## Findings validated on connor-server (BookStack v26.05-ls265 / MariaDB 11.4.12)
 
 `connor-server` is now a **live, continuously-deployed Phase-0 instance** on the Vanderbilt LAN
@@ -124,4 +156,5 @@ EFS auto-heal across instance replacement. Covered in the AWS verification secti
 [brand/ccc-brand-guidelines.md](brand/ccc-brand-guidelines.md) (design language) ·
 [../deploy/branding/README.md](../deploy/branding/README.md) (apply + a11y validation) ·
 [runbooks/connor-server-deploy.md](runbooks/connor-server-deploy.md) (live Phase-0 deploy) ·
+[runbooks/agent-api.md](runbooks/agent-api.md) (headless agent API) ·
 runbooks in [runbooks/](runbooks/).
