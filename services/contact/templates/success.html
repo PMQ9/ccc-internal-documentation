@@ -1,15 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"{{if .ThemeClass}} class="{{.ThemeClass}}"{{end}}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Thanks — {{.WikiName}}</title>
   <style>
-    :root { --ink: #1c1c1c; --surface: #ffffff; --chrome: #f5f3ef; --oak: #946e24; --border: #d9d4ca; --muted: #555; }
-    @media (prefers-color-scheme: dark) {
-      :root { --ink: #f3f1ec; --surface: #1f1f1f; --chrome: #161616; --oak: #d8b65a; --border: #3a3a3a; --muted: #aaa; }
-    }
+    /* Palette + light/dark tokens live once in the shared "brand-head" template
+       (issue #39); these rules only consume them via var(). */
     body { margin: 0; background: var(--chrome); color: var(--ink);
            font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     /* Masthead (black bar + gold rule + logo) is the shared "masthead" template. */
@@ -34,5 +32,6 @@
       <a class="btn" href="/contact">Send another</a>
     </div>
   </main>
+  {{template "theme-script" .}}
 </body>
 </html>

@@ -31,7 +31,7 @@ func testConfig() *Config {
 		Listen: ":0", Recipient: "dest@example.org", FromAddress: "from@proton.test",
 		FromName: "CCC Wiki Contact", WikiName: "CCC Wiki", WikiURL: "http://wiki.test",
 		AllowedDomain: "vanderbilt.edu",
-		Transport: "smtp", SMTPHost: "smtp.test", SMTPPort: 587, SMTPEncryption: "starttls",
+		Transport:     "smtp", SMTPHost: "smtp.test", SMTPPort: 587, SMTPEncryption: "starttls",
 		GitHubAPIBase: "https://api.github.com", RateLimitPerHour: 5,
 	}
 }
@@ -58,7 +58,12 @@ func validVals() url.Values {
 	return v
 }
 
-func post(s *server, v url.Values, withCSRF bool) *httptest.ResponseRecorder {
+// withThemeCookie attaches the cross-origin theme cookie to a request (issue #39).
+func withThemeCookie(v string) func(*http.Request) {
+	return func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "ccc-color-scheme", Value: v}) }
+}
+
+func post(s *server, v url.Values, withCSRF bool, mods ...func(*http.Request)) *httptest.ResponseRecorder {
 	if withCSRF {
 		v.Set("_csrf", "tok123")
 	}
@@ -66,6 +71,9 @@ func post(s *server, v url.Values, withCSRF bool) *httptest.ResponseRecorder {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if withCSRF {
 		req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "tok123"})
+	}
+	for _, m := range mods {
+		m(req)
 	}
 	rec := httptest.NewRecorder()
 	s.routes().ServeHTTP(rec, req)
@@ -169,6 +177,62 @@ func TestSubmitHappyPath(t *testing.T) {
 	// The success page carries the same masthead + path back (newSuccessView wires it).
 	if body := rec.Body.String(); !strings.Contains(body, "Back to the wiki") {
 		t.Error("success page missing the back-to-wiki link")
+	}
+}
+
+// The wiki writes its light/dark choice to a host-scoped ccc-color-scheme cookie
+// that reaches this cross-port service; we render the matching <html> class
+// server-side so there's no light-then-dark flash. Absence (or junk) => no class,
+// so CSS follows the OS — the wiki's guest behavior. (Issue #39.)
+func TestThemeCookieClass(t *testing.T) {
+	cases := []struct {
+		name      string
+		cookie    string // "" => send no cookie
+		wantOpen  string // the exact <html ...> opening tag we expect
+		forbidTag string // an <html ...> tag that must NOT appear
+	}{
+		{"dark cookie forces dark-mode", "dark", `<html lang="en" class="dark-mode">`, ""},
+		{"light cookie forces ccc-light", "light", `<html lang="en" class="ccc-light">`, `class="dark-mode"`},
+		{"no cookie follows OS (no class)", "", `<html lang="en">`, "class="},
+		{"unknown value follows OS (no class)", "purple", `<html lang="en">`, "class="},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := newTestServer(t, testConfig())
+			req := httptest.NewRequest(http.MethodGet, "/contact", nil)
+			if tc.cookie != "" {
+				req.AddCookie(&http.Cookie{Name: "ccc-color-scheme", Value: tc.cookie})
+			}
+			rec := httptest.NewRecorder()
+			s.routes().ServeHTTP(rec, req)
+			body := rec.Body.String()
+			if !strings.Contains(body, tc.wantOpen) {
+				t.Errorf("form: want <html> tag %q in body", tc.wantOpen)
+			}
+			// Guard against a class leaking onto the <html> tag for the OS-follow
+			// cases — checked only on the opening tag, since "dark-mode"/"class="
+			// also legitimately appear inside the theme <script>.
+			if tc.forbidTag != "" {
+				openTag := body[strings.Index(body, "<html"):]
+				openTag = openTag[:strings.IndexByte(openTag, '>')+1]
+				if strings.Contains(openTag, tc.forbidTag) {
+					t.Errorf("form: <html> tag %q unexpectedly contains %q", openTag, tc.forbidTag)
+				}
+			}
+		})
+	}
+}
+
+// The success page is server-rendered through newSuccessView too, so it must
+// honor the same theme cookie (no flash on the post-submit page either).
+func TestThemeCookieOnSuccessPage(t *testing.T) {
+	s, _ := newTestServer(t, testConfig())
+	rec := post(s, validVals(), true /*withCSRF*/, withThemeCookie("dark"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `<html lang="en" class="dark-mode">`) {
+		t.Error("success page did not render the dark-mode class from the cookie")
 	}
 }
 

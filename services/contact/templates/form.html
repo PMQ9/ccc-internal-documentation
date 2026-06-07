@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"{{if .ThemeClass}} class="{{.ThemeClass}}"{{end}}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,15 +7,8 @@
   <title>Contact / Feedback — {{.WikiName}}</title>
   <style>
     /* Self-contained + network-free (same VPN-only constraint as the wiki brand).
-       CCC palette mirrored from deploy/branding/ccc-custom-head.html. */
-    :root {
-      --ink: #1c1c1c; --surface: #ffffff; --chrome: #f5f3ef;
-      --oak: #946e24; --border: #d9d4ca; --err: #b3261e; --muted: #555;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root { --ink: #f3f1ec; --surface: #1f1f1f; --chrome: #161616;
-              --oak: #d8b65a; --border: #3a3a3a; --err: #f2a097; --muted: #aaa; }
-    }
+       The CCC palette + light/dark tokens live once in the shared "brand-head"
+       template below (issue #39); these rules only consume them via var(). */
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--chrome); color: var(--ink);
            font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -37,10 +30,11 @@
     .banner { border-radius: 6px; padding: 12px 14px; margin-bottom: 16px; }
     .banner.error { background: rgba(179,38,30,0.12); border: 1px solid var(--err); }
     .banner.warn  { background: rgba(148,110,36,0.12); border: 1px solid var(--oak); }
-    button { margin-top: 20px; background: var(--oak); color: #fff; border: 0; border-radius: 6px;
+    /* Scoped to the form card so it never bleeds onto the masthead theme toggle. */
+    .card button { margin-top: 20px; background: var(--oak); color: #fff; border: 0; border-radius: 6px;
              padding: 12px 20px; font: 600 16px inherit; cursor: pointer; }
-    button:hover { background: #7d5d1e; }
-    button:disabled { opacity: .5; cursor: not-allowed; }
+    .card button:hover { background: #7d5d1e; }
+    .card button:disabled { opacity: .5; cursor: not-allowed; }
     /* Honeypot: off-screen, untabbable, hidden from AT. Bots fill it; humans don't. */
     .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   </style>
@@ -93,5 +87,6 @@
       </form>
     </div>
   </main>
+  {{template "theme-script" .}}
 </body>
 </html>

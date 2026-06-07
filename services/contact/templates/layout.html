@@ -14,6 +14,32 @@
 {{define "brand-head"}}
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJDQ0MgV2lraSI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJmZy1hIiB4MT0iLTE4LjcyNyIgeTE9IjcuMTIyIiB4Mj0iMzIuMDA5IiB5Mj0iMjQuOTQ4IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZFRUVCNiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0I0OTI0OCIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJmZy1iIiB4MT0iNi42MzYiIHkxPSItMTMuNDQzIiB4Mj0iNDUuMzEyIiB5Mj0iNzguODEzIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZFRUVCNiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0I0OTI0OCIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJmZy1jIiB4MT0iNDYuNDkyIiB5MT0iLjkwNyIgeDI9IjY1LjA2NiIgeTI9IjcxLjY4MyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiNGRUVFQjYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNCNDkyNDgiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iZmctZCIgeDE9IjMyLjY4NiIgeTE9Ii0zLjE2IiB4Mj0iNjYuODU4IiB5Mj0iMzcuOTQiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRkVFRUI2Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjQjQ5MjQ4Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOC4wMDAsMTkuNDI5KSBzY2FsZSgwLjg3OTEyKSI+PHBhdGggZD0iTTE3LjUzLjQ2SC45NTR2Ljc2QzUuOTE4IDQuNjE0IDguMyA3LjI0OSAxMS4zOSAxMy44ODZsMjMuODYzIDUxLjAyaDEwLjdMMTcuNTMxLjQ2WiIgZmlsbD0idXJsKCNmZy1hKSIvPjxwYXRoIGQ9Ik00NS45NTMgNjQuOTA1VjQyLjM4TDMyLjc4IDE0LjE0QzI5LjY5IDcuNTUyIDMwLjUgNC4yMSAzNS43MiAxLjIyVi40NkgxNy41M2wyOC40MjMgNjQuNDQ1WiIgZmlsbD0idXJsKCNmZy1iKSIvPjxwYXRoIGQ9Ik03NC4zNzYuNDZoMTYuNTc3di43NmMtNC45NjUgMy4zOTMtNy4zNDYgNi4wMjktMTAuNDM2IDEyLjY2NmwtMjMuODYzIDUxLjAyaC0xMC43TDc0LjM3NS40NloiIGZpbGw9InVybCgjZmctYykiLz48cGF0aCBkPSJNNDUuOTUzIDY0LjkwNVY0Mi4zOGwxMy4xNzMtMjguMjRjMy4wOS02LjU4NyAyLjI4LTkuOTMtMi45MzktMTIuOTJWLjQ2aDE4LjE5TDQ1Ljk1MiA2NC45MDVaIiBmaWxsPSJ1cmwoI2ZnLWQpIi8+PC9nPjwvc3ZnPgo=">
   <style>
+    /* ---- Theme tokens (single source for both contact pages; palette mirrors
+       the wiki, deploy/branding/ccc-custom-head.html). Three states, no flash:
+         - no explicit choice -> color-scheme: light dark -> follows the OS, AND
+           the @media block below supplies the dark palette before JS runs.
+         - html.dark-mode      -> forced dark  (server-rendered from the cookie,
+           or set by the toggle JS) — this is what the wiki writes cross-port.
+         - html.ccc-light      -> forced light (ignores an OS dark preference).
+       Read order mirrors the wiki: cookie -> localStorage -> OS. (Issue #39.) */
+    :root {
+      color-scheme: light dark;     /* native controls + scrollbars follow OS by default */
+      --ink: #1c1c1c; --surface: #ffffff; --chrome: #f5f3ef;
+      --oak: #946e24; --border: #d9d4ca; --err: #b3261e; --muted: #555;
+    }
+    html.dark-mode {
+      color-scheme: dark;           /* explicit dark: pin native controls dark too */
+      --ink: #f3f1ec; --surface: #1f1f1f; --chrome: #161616;
+      --oak: #d8b65a; --border: #3a3a3a; --err: #f2a097; --muted: #aaa;
+    }
+    html.ccc-light { color-scheme: light; }   /* explicit light: override an OS dark pref */
+    @media (prefers-color-scheme: dark) {
+      html:not(.dark-mode):not(.ccc-light) {
+        --ink: #f3f1ec; --surface: #1f1f1f; --chrome: #161616;
+        --oak: #d8b65a; --border: #3a3a3a; --err: #f2a097; --muted: #aaa;
+      }
+    }
+
     /* CCC masthead — mirrors the wiki's black bar + gold-flat rule. */
     .ccc-masthead { background: #1c1c1c; border-bottom: 3px solid #CFAE70; }
     .ccc-masthead-inner {
@@ -28,8 +54,23 @@
     .ccc-back { color: #fff; text-decoration: none; white-space: nowrap;
                 font: 500 15px/1 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     .ccc-back:hover { color: #ECB748; text-decoration: underline; }
-    /* Visible focus ring that reads on the black bar (WCAG 2.4.7; #ECB748 on #1C1C1C ~10.3:1). */
-    .ccc-masthead a:focus-visible { outline: 3px solid #ECB748; outline-offset: 2px; border-radius: 2px; }
+    /* Right-side cluster: "Back to the wiki" + the JS-injected theme toggle. */
+    .ccc-masthead-actions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+    /* Theme toggle (injected by the theme-script). Visible text = accessible name;
+       white on the black bar, gold on hover/focus — mirrors the wiki's toggle. */
+    .ccc-theme-toggle {
+      display: inline-flex; align-items: center; gap: 0.4em;
+      min-width: 24px; min-height: 24px;     /* WCAG 2.5.8 target size */
+      margin: 0;                              /* self-contained: don't inherit a page's button{} margin */
+      padding: 6px 10px; background: transparent; border: 0; border-radius: 4px;
+      color: #fff; cursor: pointer;
+      font: 500 15px/1 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .ccc-theme-toggle:hover { color: #ECB748; text-decoration: underline; }
+    .ccc-theme-toggle svg { width: 18px; height: 18px; fill: currentColor; }
+    /* Visible focus ring that reads on the black bar (WCAG 2.4.7; #ECB748 on #1C1C1C ~9.3:1). */
+    .ccc-masthead a:focus-visible,
+    .ccc-theme-toggle:focus-visible { outline: 3px solid #ECB748; outline-offset: 2px; border-radius: 2px; }
     @media (max-width: 480px) { .ccc-logo { height: 30px; } .ccc-appname { font-size: 17px; } }
   </style>
 {{end}}
@@ -72,10 +113,110 @@
   <div class="ccc-masthead-inner">
     {{if .WikiURL}}
     <a class="ccc-brand" href="{{.WikiURL}}" aria-label="{{.WikiName}} — home">{{template "brand-inner" .}}</a>
-    <a class="ccc-back" href="{{.WikiURL}}">Back to the wiki</a>
     {{else}}
     <span class="ccc-brand">{{template "brand-inner" .}}</span>
     {{end}}
+    {{/* The theme toggle is appended here by the theme-script (progressive
+         enhancement — no dead control for no-JS users). "Back to the wiki" only
+         appears when there is a wiki to go back to. */}}
+    <div class="ccc-masthead-actions">
+      {{if .WikiURL}}<a class="ccc-back" href="{{.WikiURL}}">Back to the wiki</a>{{end}}
+    </div>
   </div>
 </header>
+{{end}}
+
+{{/* Theme bridge (issue #39). Resolves cookie -> localStorage -> OS (same order
+     as the wiki), injects the masthead toggle, and on toggle writes BOTH the
+     host-scoped ccc-color-scheme cookie and localStorage so the wiki follows the
+     choice (cross-port on connor-server; same origin in prod). The server has
+     already rendered the right <html> class from the cookie, so this only flips
+     things dynamically. Network-free + dependency-free, like the wiki brand.
+     Included before </body> on both pages. */}}
+{{define "theme-script"}}
+<script>
+  (function () {
+    "use strict";
+    var html = document.documentElement;
+    var KEY = "ccc-color-scheme";          // shared with the wiki; dark|light|absent => OS
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+
+    /* Icons + labels are copied verbatim from the wiki head
+       (deploy/branding/ccc-custom-head.html) so the control is identical across
+       the two origins. Re-verify on a BookStack upgrade (same gate as the brand). */
+    var SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">';
+    var ICON_DARK  = SVG + '<path d="M10 2c-1.82 0-3.53.5-5 1.35C7.99 5.08 10 8.3 10 12s-2.01 6.92-5 8.65C6.47 21.5 8.18 22 10 22c5.52 0 10-4.48 10-10S15.52 2 10 2"/></svg>';
+    var ICON_LIGHT = SVG + '<path d="M20 15.31 23.31 12 20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20zM12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6"/></svg>';
+    var LABEL = { toDark: "Dark Mode", toLight: "Light Mode" };
+
+    function readCookie() {
+      try {
+        var m = document.cookie.match(/(?:^|;\s*)ccc-color-scheme=(dark|light)(?:;|$)/);
+        return m ? m[1] : null;
+      } catch (e) { return null; }
+    }
+    function writeCookie(v) {
+      try {
+        var secure = location.protocol === "https:" ? "; Secure" : "";
+        document.cookie = KEY + "=" + v + "; path=/; max-age=31536000; SameSite=Lax" + secure;
+      } catch (e) {}
+    }
+    function localPref() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+    function choice() {                    // cookie (cross-origin) -> localStorage -> null (=> OS)
+      var c = readCookie();
+      if (c) return c;
+      var l = localPref();
+      return (l === "dark" || l === "light") ? l : null;
+    }
+    function displayedDark() { var c = choice(); return c ? c === "dark" : mq.matches; }
+
+    /* Three states match the CSS: explicit dark (.dark-mode), explicit light
+       (.ccc-light), or neither => color-scheme:light dark follows the OS. */
+    function applyExplicit(dark) {
+      html.classList.toggle("dark-mode", dark);
+      html.classList.toggle("ccc-light", !dark);
+    }
+    function persist(v) { writeCookie(v); try { localStorage.setItem(KEY, v); } catch (e) {} }
+
+    function refresh() {                   // keep every toggle's icon + label honest
+      var dark = displayedDark();
+      var btns = document.querySelectorAll("[data-ccc-toggle]");
+      for (var i = 0; i < btns.length; i++) {
+        var icon = btns[i].querySelector("[data-ccc-icon]");
+        var label = btns[i].querySelector("[data-ccc-label]");
+        if (icon) icon.innerHTML = dark ? ICON_LIGHT : ICON_DARK;
+        if (label) label.textContent = dark ? LABEL.toLight : LABEL.toDark;
+      }
+    }
+
+    function setExplicit(dark) { persist(dark ? "dark" : "light"); applyExplicit(dark); refresh(); }
+    function toggleTheme() { setExplicit(!displayedDark()); }
+
+    /* On load, converge both stores if a choice exists (a wiki cookie backfills
+       our localStorage; a stale localStorage is overwritten by the cookie) and
+       pin the classes. The server already rendered them, so there is no flash. */
+    function sync() { var c = choice(); if (c) setExplicit(c === "dark"); }
+
+    /* Following the OS (no choice): CSS repaints on its own — just keep labels honest. */
+    function onSystemChange() { if (!choice()) refresh(); }
+    if (mq.addEventListener) mq.addEventListener("change", onSystemChange);
+    else if (mq.addListener) mq.addListener(onSystemChange);   // older Safari
+
+    function injectToggle() {
+      var host = document.querySelector(".ccc-masthead-actions");
+      if (!host || host.querySelector(".ccc-theme-toggle")) return;
+      var t = document.createElement("button");
+      t.type = "button";
+      t.className = "ccc-theme-toggle";
+      t.setAttribute("data-ccc-toggle", "");
+      t.innerHTML = '<span data-ccc-icon></span><span data-ccc-label></span>';  // visible text = accessible name
+      t.addEventListener("click", toggleTheme);
+      host.appendChild(t);
+    }
+
+    function init() { injectToggle(); sync(); refresh(); }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+    else init();
+  })();
+</script>
 {{end}}

@@ -21,8 +21,28 @@ var templatesFS embed.FS
 const (
 	csrfCookie    = "ccc_csrf"
 	csrfField     = "_csrf"
-	honeypotField = "website" // a field humans never see; bots fill it
+	honeypotField = "website"          // a field humans never see; bots fill it
+	themeCookie   = "ccc-color-scheme" // cross-origin theme bridge from the wiki (issue #39)
 )
+
+// themeClass maps the wiki's host-scoped ccc-color-scheme cookie to the initial
+// <html> class so the page paints in the chosen mode with no light-then-dark
+// flash. The cookie is authoritative across origins; its absence (or any value
+// other than dark/light) means "follow the OS", matching the wiki's guest
+// behavior — so we add no class and let CSS resolve it. (Issue #39.)
+//
+//	dark  -> "dark-mode" (force dark)   light -> "ccc-light" (force light)
+func themeClass(r *http.Request) string {
+	if c, err := r.Cookie(themeCookie); err == nil {
+		switch c.Value {
+		case "dark":
+			return "dark-mode"
+		case "light":
+			return "ccc-light"
+		}
+	}
+	return ""
+}
 
 type server struct {
 	cfg     *Config
@@ -93,8 +113,8 @@ func (s *server) handleReadyz(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ready"))
 }
 
-func (s *server) handleForm(w http.ResponseWriter, _ *http.Request) {
-	s.renderForm(w, http.StatusOK, s.newFormView(w, map[string]string{}, map[string]string{}, ""))
+func (s *server) handleForm(w http.ResponseWriter, r *http.Request) {
+	s.renderForm(w, http.StatusOK, s.newFormView(w, r, map[string]string{}, map[string]string{}, ""))
 }
 
 func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +122,7 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 
 	if err := r.ParseForm(); err != nil {
 		s.renderForm(w, http.StatusBadRequest,
-			s.newFormView(w, map[string]string{}, map[string]string{}, "Could not read the form. Please try again."))
+			s.newFormView(w, r, map[string]string{}, map[string]string{}, "Could not read the form. Please try again."))
 		return
 	}
 
@@ -121,13 +141,13 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 
 	if !s.limiter.allow(ip, s.now()) {
 		s.log.Warn("contact rate limited", "ip", ip)
-		s.renderForm(w, http.StatusTooManyRequests, s.newFormView(w, values, map[string]string{},
+		s.renderForm(w, http.StatusTooManyRequests, s.newFormView(w, r, values, map[string]string{},
 			"Too many submissions from your connection. Please wait a few minutes and try again."))
 		return
 	}
 
 	if !s.verifyCSRF(r) {
-		s.renderForm(w, http.StatusForbidden, s.newFormView(w, values, map[string]string{},
+		s.renderForm(w, http.StatusForbidden, s.newFormView(w, r, values, map[string]string{},
 			"Your session expired. Please review and submit again."))
 		return
 	}
@@ -136,7 +156,7 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	// don't learn they were caught; send nothing.
 	if strings.TrimSpace(r.PostFormValue(honeypotField)) != "" {
 		s.log.Warn("contact honeypot tripped", "ip", ip)
-		s.renderSuccess(w, s.newSuccessView(""))
+		s.renderSuccess(w, s.newSuccessView(r, ""))
 		return
 	}
 
@@ -146,13 +166,13 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		for _, e := range ferrs {
 			errs[e.Field] = e.Message
 		}
-		s.renderForm(w, http.StatusBadRequest, s.newFormView(w, values, errs, ""))
+		s.renderForm(w, http.StatusBadRequest, s.newFormView(w, r, values, errs, ""))
 		return
 	}
 
 	if !s.cfg.mailConfigured() {
 		s.log.Error("contact submit but mail not configured")
-		s.renderForm(w, http.StatusServiceUnavailable, s.newFormView(w, values, map[string]string{},
+		s.renderForm(w, http.StatusServiceUnavailable, s.newFormView(w, r, values, map[string]string{},
 			"Email delivery isn't set up yet. Please email "+s.cfg.Recipient+" directly for now."))
 		return
 	}
@@ -165,7 +185,7 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	if err := s.mailer.Send(sendCtx, s.buildMessage(sub)); err != nil {
 		s.log.Error("contact email send failed", "err", err, "ip", ip, "kind", string(sub.Kind))
-		s.renderForm(w, http.StatusBadGateway, s.newFormView(w, values, map[string]string{},
+		s.renderForm(w, http.StatusBadGateway, s.newFormView(w, r, values, map[string]string{},
 			"Sorry — we couldn't send your message right now. Please try again in a few minutes."))
 		return
 	}
@@ -184,7 +204,7 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.renderSuccess(w, s.newSuccessView(issueURL))
+	s.renderSuccess(w, s.newSuccessView(r, issueURL))
 }
 
 // ---- CSRF (stateless double-submit cookie) --------------------------------
@@ -240,6 +260,7 @@ func (s *server) clientIP(r *http.Request) string {
 type formView struct {
 	WikiName      string
 	WikiURL       string
+	ThemeClass    string // initial <html> class from the theme cookie (issue #39)
 	CSRFToken     string
 	Honeypot      string
 	Kinds         []kindOption
@@ -252,16 +273,18 @@ type formView struct {
 }
 
 type successView struct {
-	WikiName  string
-	WikiURL   string
-	Recipient string
-	IssueURL  string
+	WikiName   string
+	WikiURL    string
+	ThemeClass string // initial <html> class from the theme cookie (issue #39)
+	Recipient  string
+	IssueURL   string
 }
 
-func (s *server) newFormView(w http.ResponseWriter, values, errs map[string]string, general string) formView {
+func (s *server) newFormView(w http.ResponseWriter, r *http.Request, values, errs map[string]string, general string) formView {
 	return formView{
 		WikiName:      s.cfg.WikiName,
 		WikiURL:       s.cfg.WikiURL,
+		ThemeClass:    themeClass(r),
 		CSRFToken:     s.issueCSRF(w),
 		Honeypot:      honeypotField,
 		Kinds:         kindOptions(),
@@ -281,12 +304,13 @@ func (s *server) renderForm(w http.ResponseWriter, status int, v formView) {
 // newSuccessView builds the success view with the brand fields filled in. Both
 // success paths (honeypot decoy + real send) go through here so neither can ship
 // the masthead without the "home"/"back to the wiki" links.
-func (s *server) newSuccessView(issueURL string) successView {
+func (s *server) newSuccessView(r *http.Request, issueURL string) successView {
 	return successView{
-		WikiName:  s.cfg.WikiName,
-		WikiURL:   s.cfg.WikiURL,
-		Recipient: s.cfg.Recipient,
-		IssueURL:  issueURL,
+		WikiName:   s.cfg.WikiName,
+		WikiURL:    s.cfg.WikiURL,
+		ThemeClass: themeClass(r),
+		Recipient:  s.cfg.Recipient,
+		IssueURL:   issueURL,
 	}
 }
 

@@ -307,10 +307,14 @@
 
      What it does:
        (2) Default theme follows the OS (prefers-color-scheme). An explicit
-           user toggle wins and is remembered per-device in localStorage.
-           Theme is resolved CLIENT-SIDE so the OS default applies for guests
-           and brand-new users too; BookStack's server-side dark-mode pref is
-           intentionally not used for display (it can't see the OS).
+           user toggle wins and is remembered per-device, written to BOTH a
+           host-scoped COOKIE and localStorage (read order: cookie -> localStorage
+           -> OS). The cookie is what bridges the choice to the cross-port contact
+           page (cookies are scoped by host, not port; same origin in prod), which
+           localStorage cannot do. Theme is resolved CLIENT-SIDE so the OS default
+           applies for guests and brand-new users too; BookStack's server-side
+           dark-mode pref is intentionally not used for display (it can't see the
+           OS). (Cookie bridge: issue #39.)
        (1) Every dark/light toggle (BookStack's own + the injected login one)
            is wired to that one source of truth and reflects the DISPLAYED
            state, so there's no stale "Dark Mode" label on an already-dark page.
@@ -321,7 +325,7 @@
     "use strict";
 
     var html = document.documentElement;
-    var KEY = "ccc-color-scheme";            // "dark" | "light" | absent => follow OS
+    var KEY = "ccc-color-scheme";            // "dark" | "light" | absent => follow OS (both stores)
     var mq = window.matchMedia("(prefers-color-scheme: dark)");
     var serverDark = html.classList.contains("dark-mode");  // capture before we override
 
@@ -341,9 +345,36 @@
        the server state); default the unseen one to English (deployment locale). */
     var LABEL = { toDark: "Dark Mode", toLight: "Light Mode" };
 
-    function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
-    function persist(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
-    function resolveDark() { var s = stored(); return s ? s === "dark" : mq.matches; }
+    /* Theme lives in TWO mirrored stores. The COOKIE is host-scoped (sent to every
+       port on this host, and same-origin in prod), so it carries the choice to the
+       cross-port contact page — localStorage can't (it's per-origin). It is NOT
+       HttpOnly on purpose: this client JS owns it and the value (dark/light) is
+       non-sensitive. localStorage is the same-origin mirror. Writing sets BOTH so
+       they can't drift; reading prefers the cookie. (Issue #39.) */
+    function readCookie() {
+      try {
+        var m = document.cookie.match(/(?:^|;\s*)ccc-color-scheme=(dark|light)(?:;|$)/);
+        return m ? m[1] : null;
+      } catch (e) { return null; }
+    }
+    function writeCookie(v) {
+      try {
+        var secure = location.protocol === "https:" ? "; Secure" : "";
+        document.cookie = KEY + "=" + v + "; path=/; max-age=31536000; SameSite=Lax" + secure;
+      } catch (e) {}
+    }
+    function localPref() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+    function choice() {                      // cookie -> localStorage -> null (=> follow OS)
+      var c = readCookie();
+      if (c) return c;
+      var l = localPref();
+      return (l === "dark" || l === "light") ? l : null;
+    }
+    function persist(v) {                    // write BOTH mirrors so they never drift
+      writeCookie(v);
+      try { localStorage.setItem(KEY, v); } catch (e) {}
+    }
+    function resolveDark() { var c = choice(); return c ? c === "dark" : mq.matches; }
     function isDark() { return html.classList.contains("dark-mode"); }
 
     function apply(dark) {
@@ -359,8 +390,15 @@
     /* (2) Apply ASAP, in <head>, before the body paints — avoids a flash. */
     apply(resolveDark());
 
+    /* (2) Converge the two stores so this origin and the cross-port contact page
+       agree: a pre-cookie localStorage choice backfills the cookie, and a cookie
+       set on the contact page syncs back into this origin's localStorage. Having
+       no choice writes nothing — absence is precisely what "follow the OS" means. */
+    var current = choice();
+    if (current) persist(current);
+
     /* (2) Track OS changes while the user has made no explicit choice. */
-    function onSystemChange() { if (!stored()) { apply(mq.matches); refreshToggles(); } }
+    function onSystemChange() { if (!choice()) { apply(mq.matches); refreshToggles(); } }
     if (mq.addEventListener) mq.addEventListener("change", onSystemChange);
     else if (mq.addListener) mq.addListener(onSystemChange);  // older Safari
 

@@ -15,7 +15,13 @@ take it to AWS.
   masthead, gold-flat rule, CCC lockup, "CCC Wiki" name, favicon) — not a
   BookStack-native page (cross-origin + `<form>` sanitization make native embedding
   infeasible; issue #38). Its logo and a "Back to the wiki" link point at
-  `CONTACT_WIKI_URL` (defaults to `APP_URL`). Light/dark parity is tracked in #39.
+  `CONTACT_WIKI_URL` (defaults to `APP_URL`).
+- **Light/dark parity (issue #39):** the page follows the wiki's theme. The wiki
+  writes its choice to a host-scoped `ccc-color-scheme` cookie (cookies span ports;
+  `localStorage` doesn't), which this service reads **server-side** to render the
+  initial `html.dark-mode`/`ccc-light` class (no flash). It also has its own masthead
+  toggle that writes the same cookie back, so toggling here is reflected on the wiki.
+  No cookie ⇒ follow the OS. Non-`HttpOnly` and separate from the `ccc_csrf` cookie.
 
 ## How it works
 

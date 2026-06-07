@@ -61,6 +61,21 @@ mh_hdr() { curl -s "$MH_BASE/api/v2/messages" | jq -r ".items[0].Content.Headers
   assert_contains "$body" "Back to the wiki" "form must link back to the wiki (CONTACT_WIKI_URL)"
 }
 
+@test "T-020 theme cookie bridges the wiki's dark/light choice (issue #39)" {
+  # The wiki sets a host-scoped ccc-color-scheme cookie; this cross-port service
+  # renders the matching <html> class server-side so there's no light-then-dark
+  # flash. Absence => no class (CSS follows the OS, matching wiki guest behavior).
+  # The REVERSE direction (the contact toggle writing the cookie for the wiki to
+  # read) is client-side JS — out of scope for this server-side suite, and verified
+  # manually per the deploy/branding/README.md cross-port checklist item.
+  dark="$(curl -s -b 'ccc-color-scheme=dark' "$C_BASE/contact")"
+  assert_contains "$dark" '<html lang="en" class="dark-mode">' "dark cookie must render html.dark-mode"
+  light="$(curl -s -b 'ccc-color-scheme=light' "$C_BASE/contact")"
+  assert_contains "$light" '<html lang="en" class="ccc-light">' "light cookie must render html.ccc-light"
+  none="$(curl -s "$C_BASE/contact")"
+  assert_contains "$none" '<html lang="en">' "no cookie must render a bare <html> (follow OS)"
+}
+
 @test "T-020 valid submission delivers a structured email" {
   mh_clear
   jar="$(mktemp)"
