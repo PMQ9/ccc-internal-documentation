@@ -161,6 +161,18 @@
   .tri-layout-right,
   .tri-layout-left-contents,
   .tri-layout-right-contents { background-color: var(--ccc-chrome-surface); }
+  /* Links on the chrome surface: in light mode Oak-on-cream is ~4.20:1 (below
+     AA). Override `--color-link` to black here, so sidebar links that use
+     BookStack's default link color resolve to black (15.8:1 on cream).
+     Entity-colored links (book green / page blue) have their own explicit color
+     and are unaffected. The `:root:not(.dark-mode)` guard leaves dark mode on
+     Flat Gold (8.9:1 on #111). */
+  :root:not(.dark-mode) .tri-layout-left,
+  :root:not(.dark-mode) .tri-layout-right,
+  :root:not(.dark-mode) .tri-layout-left-contents,
+  :root:not(.dark-mode) .tri-layout-right-contents {
+    --color-link: var(--ccc-black);
+  }
 
   /* ----------------------------------------------------------------------
      6. Accessibility — focus indicator (WCAG 2.4.7 / 2.4.11, non-text 3:1).

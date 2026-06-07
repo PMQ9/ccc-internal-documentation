@@ -114,10 +114,11 @@ is intentionally dark in *both* modes. The page background in dark mode is `#111
 BookStack uses it as a *button background* with a white label — white on a lighter gold is 2.11 : 1.
 (The *DB* `app-color` is **black**, not Oak — see the mapping table in §7 for why.)
 
-> **Known light-mode gap (tracked, not yet fixed):** Oak link text on the **cream** chrome `#F5F3EF`
-> is ~4.20 : 1 and on the `#F2F2F2` page gutter ~4.15 : 1 — both just under AA. The rule above
-> ("use black for links on cream chrome") is the intended resolution; it is not yet implemented for
-> sidebar links. Dark mode is unaffected (Flat Gold). See the branding README validation checklist.
+> **Resolved (issue #26):** Oak link text on the cream chrome `#F5F3EF` sidebar now renders in black
+> `#1C1C1C` (15.8 : 1) in light mode, applied via a chrome-scoped `--color-link` override in
+> `ccc-custom-head.html` §5. Content-body links remain Oak on white (4.65 : 1); entity-colored links
+> (book green, page blue) have their own explicit `color` and are unaffected. Dark mode is unchanged
+> (Flat Gold on `#111` = 8.9 : 1).
 
 ---
 
