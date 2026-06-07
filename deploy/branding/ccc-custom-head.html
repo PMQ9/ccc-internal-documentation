@@ -491,7 +491,7 @@
 
 <script id="ccc-contact-link">
   /* ----------------------------------------------------------------------
-     Inject a "Contact / Feedback" link into the BookStack header. The URL is
+     Inject a "Contact" link into the BookStack header. The URL is
      substituted at deploy time by apply-brand.sh (config-as-code, from
      CONTACT_URL). If it is left as the placeholder or empty — e.g. this head was
      pasted by hand, or the contact service isn't wired — no link is added.
@@ -514,7 +514,7 @@
       var a = document.createElement("a");
       a.className = "ccc-contact-link";
       a.href = url;
-      a.textContent = "Contact / Feedback";
+      a.textContent = "Contact";
       // Light inline styling so it reads as a header link even if it lands
       // outside the styled link list; inherits the header's white-on-black.
       a.style.color = "#fff";

@@ -1,7 +1,7 @@
 # contact service
 
-A small, self-contained HTTP service that serves the CCC Wiki **Contact /
-Feedback** form and, on submit, **emails the destination mailbox** and
+A small, self-contained HTTP service that serves the CCC Wiki **Contact**
+form and, on submit, **emails the destination mailbox** and
 (optionally) **files a GitHub issue**. It owns no database — one submission is
 one email plus one issue.
 

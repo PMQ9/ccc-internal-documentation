@@ -54,7 +54,7 @@ NAT, trimmed endpoints); Terraform IaC.
 
 ## Contact form (issue #15)
 
-BookStack has no form handler and sanitizes page HTML, so the **Contact / Feedback** page is served
+BookStack has no form handler and sanitizes page HTML, so the **Contact** page is served
 by a small, separate, standard-library Go service ([`services/contact/`](../services/contact/)) and
 linked from the wiki header (a link injected via `app-custom-head` by `apply-brand.sh`). One
 submission becomes one email to the CCC mailbox (`Reply-To` = the submitter) plus, optionally, one

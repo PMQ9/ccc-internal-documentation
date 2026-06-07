@@ -150,7 +150,7 @@ Read by [deploy/local/compose.yaml](../deploy/local/compose.yaml). Defaults show
 ## 1b) Contact-form service (issue #15) — change in `deploy/local/.env`
 
 The `services/contact` container (run behind the `contact` compose profile;
-`dev-up.sh` enables it) serves the wiki's **Contact / Feedback** page, emails
+`dev-up.sh` enables it) serves the wiki's **Contact** page, emails
 `CONTACT_RECIPIENT`, and optionally files a GitHub issue. No-IT delivery uses
 **AgentMail** (an email API for agents — recommended; sends from your
 `agentmail.to` inbox with SPF/DKIM/DMARC handled, API-key auth, free tier).

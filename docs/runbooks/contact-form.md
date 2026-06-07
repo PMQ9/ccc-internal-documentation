@@ -1,13 +1,13 @@
 # Runbook — contact-form intake (issue #15)
 
-A "Contact / Feedback" page where staff/faculty send requests, bug reports, and
+A "Contact" page where staff/faculty send requests, bug reports, and
 feedback. Each submission becomes **one email** to the CCC mailbox and, optionally,
 **one GitHub issue**. This runbook is how to set it up, operate it, and (later)
 take it to AWS.
 
 - **Code:** [`services/contact/`](../../services/contact/) (Go, standard-library only).
 - **Form URL:** the value of `CONTACT_URL` (local default `http://localhost:8081/contact`;
-  connor-server e.g. `http://10.76.88.214:8081/contact`). A "Contact / Feedback"
+  connor-server e.g. `http://10.76.88.214:8081/contact`). A "Contact"
   link is injected into the wiki header by [`apply-brand.sh`](../../deploy/local/apply-brand.sh).
 - **Config:** non-secret knobs in [`config/config.md`](../../config/config.md) §1b;
   secrets in [`config/.env.example`](../../config/.env.example) §5 / `deploy/local/.env`.
@@ -27,7 +27,7 @@ take it to AWS.
 
 ```
 Staff (on VPN, logged into the wiki)
-  → header "Contact / Feedback" link → GET  /contact      (branded form + CSRF cookie)
+  → header "Contact" link → GET  /contact      (branded form + CSRF cookie)
   → POST /contact/submit
        guards: VPN + login-gated link · @vanderbilt.edu · CSRF · honeypot · body cap · rate limits · fixed recipient
        ├─ email  → To = CONTACT_RECIPIENT, Reply-To = submitter   (transport below)

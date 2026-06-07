@@ -34,7 +34,7 @@ done
 
 # Resolve the contact-form URL (config-as-code): an env override wins, else read
 # it from the compose .env, else empty. The head carries a __CCC_CONTACT_URL__
-# placeholder we substitute so the "Contact / Feedback" header link points at the
+# placeholder we substitute so the "Contact" header link points at the
 # live service (and is omitted entirely when the URL is unset).
 CONTACT_URL="${CONTACT_URL:-}"
 if [ -z "$CONTACT_URL" ] && [ -f .env ]; then

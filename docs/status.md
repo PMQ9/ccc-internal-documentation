@@ -57,7 +57,7 @@ BookStack UI; design language and WCAG 2.2 AA criteria documented. Applied once 
 in code.
 
 **Contact-form intake** ([../services/contact](../services/contact), issue #15)
-A small standard-library Go service serves the wiki's **Contact / Feedback** page and turns each
+A small standard-library Go service serves the wiki's **Contact** page and turns each
 submission into one email to the CCC mailbox (`Reply-To` = the submitter) plus, optionally, a GitHub
 issue (best-effort). Transport is pluggable — `agentmail` (recommended; an email API for agents, no
 IT, no DMARC wall), `smtp` (Gmail App Password / own-domain + Brevo / AWS SES), or `graph` (M365
