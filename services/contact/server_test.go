@@ -33,6 +33,7 @@ func testConfig() *Config {
 		AllowedDomain: "vanderbilt.edu",
 		Transport:     "smtp", SMTPHost: "smtp.test", SMTPPort: 587, SMTPEncryption: "starttls",
 		GitHubAPIBase: "https://api.github.com", RateLimitPerHour: 5,
+		GlobalRateLimitPerHour: 100, GitHubDailyCap: 50, TrustedProxyHops: 1,
 	}
 }
 
@@ -395,5 +396,175 @@ func TestRootRedirect(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); loc != "/contact" {
 		t.Errorf("Location = %q, want /contact", loc)
+	}
+}
+
+// An oversized body must be rejected (413) before any parsing/validation, and
+// nothing is sent. (issue #41 — gap 2)
+func TestSubmitOversizedBody(t *testing.T) {
+	s, fm := newTestServer(t, testConfig())
+	v := validVals()
+	v.Set("details", strings.Repeat("A", maxBodyBytes+1024)) // push the body past the cap
+	rec := post(s, v, true)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want 413", rec.Code)
+	}
+	if len(fm.sent) != 0 {
+		t.Error("oversized submission was sent")
+	}
+}
+
+// clientIP must trust the rightmost trusted-hop XFF entry (and validate it),
+// never the client-forgeable leftmost one. (issue #41 — gap 4)
+func TestClientIP(t *testing.T) {
+	cases := []struct {
+		name       string
+		trustProxy bool
+		hops       int
+		xff        string
+		remote     string
+		want       string
+	}{
+		{"no proxy ignores xff", false, 1, "1.2.3.4", "10.0.0.9:5555", "10.0.0.9"},
+		{"trusts rightmost (hops=1)", true, 1, "9.9.9.9, 203.0.113.7", "10.0.0.9:5555", "203.0.113.7"},
+		{"forged left entry ignored", true, 1, "evil, 203.0.113.7", "10.0.0.9:5555", "203.0.113.7"},
+		// hops=2: the client sits 2nd-from-right (one trusted proxy appended its own IP).
+		{"hops=2 trusts 2nd-from-right", true, 2, "203.0.113.7, 10.0.0.1", "10.0.0.9:5555", "203.0.113.7"},
+		// hops=2 with a forged leftmost entry: the real client is still 2nd-from-right.
+		{"hops=2 ignores forged leftmost", true, 2, "evil, 203.0.113.7, 10.0.0.1", "10.0.0.9:5555", "203.0.113.7"},
+		{"junk rightmost falls back to remote", true, 1, "203.0.113.7, not-an-ip", "10.0.0.9:5555", "10.0.0.9"},
+		{"missing xff falls back to remote", true, 1, "", "10.0.0.9:5555", "10.0.0.9"},
+		{"short header clamps to leftmost present", true, 3, "203.0.113.7", "10.0.0.9:5555", "203.0.113.7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := testConfig()
+			cfg.TrustProxy, cfg.TrustedProxyHops = tc.trustProxy, tc.hops
+			s, _ := newTestServer(t, cfg)
+			req := httptest.NewRequest(http.MethodPost, "/contact/submit", nil)
+			req.RemoteAddr = tc.remote
+			if tc.xff != "" {
+				req.Header.Set("X-Forwarded-For", tc.xff)
+			}
+			if got := s.clientIP(req); got != tc.want {
+				t.Errorf("clientIP = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Rotating the (forgeable) leftmost XFF entry must NOT evade the per-IP limit:
+// the limiter keys on the trusted rightmost entry, which the ALB sets to the real
+// client. (issue #41 — gaps 3+4)
+func TestRateLimitNotEvadableByForgedXFF(t *testing.T) {
+	cfg := testConfig()
+	cfg.RateLimitPerHour = 2
+	cfg.TrustProxy, cfg.TrustedProxyHops = true, 1
+	s, _ := newTestServer(t, cfg)
+	forge := func(spoof string) func(*http.Request) {
+		return func(r *http.Request) { r.Header.Set("X-Forwarded-For", spoof+", 203.0.113.7") }
+	}
+	if rec := post(s, validVals(), true, forge("1.1.1.1")); rec.Code != http.StatusOK {
+		t.Fatalf("attempt 1 = %d, want 200", rec.Code)
+	}
+	if rec := post(s, validVals(), true, forge("2.2.2.2")); rec.Code != http.StatusOK {
+		t.Fatalf("attempt 2 = %d, want 200", rec.Code)
+	}
+	if rec := post(s, validVals(), true, forge("3.3.3.3")); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("attempt 3 (forged left, same real client) = %d, want 429", rec.Code)
+	}
+}
+
+// The global circuit-breaker trips on aggregate volume even when each request is
+// from a distinct IP under its own per-IP cap. (issue #41 — gap 1)
+func TestGlobalCircuitBreaker(t *testing.T) {
+	cfg := testConfig()
+	cfg.RateLimitPerHour = 100 // ensure the per-IP cap never trips here
+	cfg.GlobalRateLimitPerHour = 2
+	s, fm := newTestServer(t, cfg)
+	from := func(ip string) func(*http.Request) {
+		return func(r *http.Request) { r.RemoteAddr = ip + ":40000" }
+	}
+	if rec := post(s, validVals(), true, from("198.51.100.1")); rec.Code != http.StatusOK {
+		t.Fatalf("attempt 1 = %d, want 200", rec.Code)
+	}
+	if rec := post(s, validVals(), true, from("198.51.100.2")); rec.Code != http.StatusOK {
+		t.Fatalf("attempt 2 = %d, want 200", rec.Code)
+	}
+	if rec := post(s, validVals(), true, from("198.51.100.3")); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("attempt 3 (distinct IP, global cap) = %d, want 429", rec.Code)
+	}
+	if len(fm.sent) != 2 {
+		t.Errorf("sent %d, want 2 (3rd blocked by the global cap)", len(fm.sent))
+	}
+}
+
+// The GitHub daily cap throttles the issue channel without ever blocking email.
+// (issue #41 — gap 1)
+func TestGitHubDailyCap(t *testing.T) {
+	var filed int
+	ghAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		filed++
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"html_url":"https://github.com/x/y/issues/1"}`))
+	}))
+	defer ghAPI.Close()
+
+	cfg := testConfig()
+	cfg.GitHubToken, cfg.GitHubRepo, cfg.GitHubAPIBase = "tok", "x/y", ghAPI.URL
+	cfg.GitHubDailyCap = 1
+	s, fm := newTestServer(t, cfg)
+
+	if rec := post(s, validVals(), true); rec.Code != http.StatusOK {
+		t.Fatalf("attempt 1 = %d, want 200", rec.Code)
+	}
+	if rec := post(s, validVals(), true); rec.Code != http.StatusOK {
+		t.Fatalf("attempt 2 = %d, want 200", rec.Code)
+	}
+	if len(fm.sent) != 2 {
+		t.Errorf("emails sent = %d, want 2 (the daily cap must not block email)", len(fm.sent))
+	}
+	if filed != 1 {
+		t.Errorf("issues filed = %d, want 1 (daily cap = 1)", filed)
+	}
+}
+
+// Every HTML response must carry the defense-in-depth security headers. (NEW — N2)
+func TestSecurityHeaders(t *testing.T) {
+	s, _ := newTestServer(t, testConfig())
+	req := httptest.NewRequest(http.MethodGet, "/contact", nil)
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, req)
+	h := rec.Header()
+	for _, hdr := range []string{"Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options"} {
+		if h.Get(hdr) == "" {
+			t.Errorf("missing security header %s", hdr)
+		}
+	}
+	if csp := h.Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Errorf("CSP missing frame-ancestors 'none': %q", csp)
+	}
+	if got := h.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+}
+
+// The attacker-controlled User-Agent must be truncated before it lands in the
+// notification email body. (NEW — N3)
+func TestUserAgentTruncatedInEmail(t *testing.T) {
+	s, fm := newTestServer(t, testConfig())
+	longUA := strings.Repeat("U", 5000)
+	rec := post(s, validVals(), true, func(r *http.Request) { r.Header.Set("User-Agent", longUA) })
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if len(fm.sent) != 1 {
+		t.Fatalf("sent %d, want 1", len(fm.sent))
+	}
+	if strings.Contains(fm.sent[0].Body, longUA) {
+		t.Error("email body contains the full untruncated User-Agent")
+	}
+	if !strings.Contains(fm.sent[0].Body, "…") {
+		t.Error("expected a truncation ellipsis on the User-Agent")
 	}
 }

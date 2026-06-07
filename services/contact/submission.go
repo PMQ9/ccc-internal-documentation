@@ -222,22 +222,50 @@ func (s *Submission) emailView(wikiName string) emailView {
 	}
 }
 
+// mdFence renders s as a GitHub-flavored-Markdown fenced code block, picking a
+// backtick fence strictly longer than the longest run of backticks inside s.
+// Inside a code fence nothing is interpreted — no @mentions notify users, no
+// #refs cross-link, no ![images] load (tracking/exfil pixels), no HTML renders —
+// so this neutralizes the whole class of Markdown-injection abuse from untrusted
+// submission fields rather than escaping triggers one by one (issue #41).
+func mdFence(s string) string {
+	if s == "" {
+		return "_(none provided)_"
+	}
+	longest, run := 0, 0
+	for _, c := range s {
+		if c == '`' {
+			if run++; run > longest {
+				longest = run
+			}
+		} else {
+			run = 0
+		}
+	}
+	fence := strings.Repeat("`", max(3, longest+1))
+	// Own-line fence markers + a trailing newline keep them intact even when s
+	// starts/ends with backticks or whitespace.
+	return fence + "\n" + s + "\n" + fence
+}
+
 // issueBody renders the GitHub issue body (Markdown) for the same submission.
+// Every submitter-controlled field is wrapped with mdFence so a submission can
+// never inject @mentions, #refs, images, or markup into the tracker; only the
+// closed-set Type and the server-generated timestamp render as prose (issue #41).
 func (s *Submission) issueBody(wikiName string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "**Type:** %s\n", kindLabels[s.Kind])
-	fmt.Fprintf(&b, "**From:** %s <%s>\n", s.Name, s.Email)
-	fmt.Fprintf(&b, "**Submitted:** %s\n", s.At.Format("2006-01-02 15:04 MST"))
+	fmt.Fprintf(&b, "**Type:** %s  \n", kindLabels[s.Kind])
+	fmt.Fprintf(&b, "**Submitted:** %s\n\n", s.At.Format("2006-01-02 15:04 MST"))
+	b.WriteString("**From** (name / email):\n")
+	b.WriteString(mdFence(s.Name + " <" + s.Email + ">"))
 	if s.Page != "" {
-		fmt.Fprintf(&b, "**Page/Area:** %s\n", s.Page)
+		b.WriteString("\n\n**Page/Area:**\n")
+		b.WriteString(mdFence(s.Page))
 	}
-	fmt.Fprintf(&b, "\n**Summary:** %s\n\n", s.Summary)
-	b.WriteString("**Details:**\n\n")
-	if s.Details != "" {
-		b.WriteString(s.Details)
-	} else {
-		b.WriteString("_(none provided)_")
-	}
-	fmt.Fprintf(&b, "\n\n---\n_Filed automatically by the %s contact form. Reply to the email notification to reach the submitter._\n", wikiName)
+	b.WriteString("\n\n**Summary:**\n")
+	b.WriteString(mdFence(s.Summary))
+	b.WriteString("\n\n**Details:**\n")
+	b.WriteString(mdFence(s.Details))
+	fmt.Fprintf(&b, "\n\n---\n_Filed automatically by the %s contact form. All submitter-supplied fields above are shown verbatim and unrendered. Reply to the email notification to reach the submitter._\n", wikiName)
 	return b.String()
 }

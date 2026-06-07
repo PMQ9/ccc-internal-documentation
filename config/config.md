@@ -173,7 +173,10 @@ Graph — are in the [contact-form runbook](../docs/runbooks/contact-form.md). S
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_ENCRYPTION` | `smtp.gmail.com` / `587` / `starttls` | smtp only. SES later: `email-smtp.<region>.amazonaws.com`. |
 | `CONTACT_GITHUB_REPO` | `PMQ9/ccc-internal-documentation` | Repo for auto-filed issues (label by type: bug→bug, request→enhancement, feedback→feedback, other→question). Empty token disables. |
 | `CONTACT_RATE_LIMIT_PER_HOUR` | `20` | Per source IP. |
+| `CONTACT_GLOBAL_RATE_LIMIT_PER_HOUR` | `100` | Aggregate circuit-breaker across all IPs — caps total submissions/hour even when no single IP is over its limit. Trips fail-safe (protects the mailbox); auto-resets. |
+| `CONTACT_GITHUB_DAILY_CAP` | `50` | Max GitHub issues filed per 24h. Over the cap, the email still sends; only the issue is skipped. |
 | `CONTACT_TRUST_PROXY` / `CONTACT_SECURE_COOKIE` | `false` / `false` | Set both `true` on AWS (behind the ALB, over HTTPS). |
+| `CONTACT_TRUSTED_PROXY_HOPS` | `1` | Only with `CONTACT_TRUST_PROXY=true`: # of trusted proxies appending `X-Forwarded-For`. The client IP is read that-many entries from the **right** (1 = a single ALB), so a client can't forge it. |
 
 ## 2) Deploy script knobs — change in shell env when invoking the script
 

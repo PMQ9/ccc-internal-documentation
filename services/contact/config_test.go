@@ -3,14 +3,21 @@ package main
 import "testing"
 
 func TestValidate(t *testing.T) {
-	ok := &Config{Transport: "smtp", SMTPEncryption: "starttls", RateLimitPerHour: 1}
-	if err := ok.validate(); err != nil {
+	// A baseline valid config; cases below flip one field at a time to invalid.
+	base := func() *Config {
+		return &Config{Transport: "smtp", SMTPEncryption: "starttls", RateLimitPerHour: 1,
+			GlobalRateLimitPerHour: 1, GitHubDailyCap: 1, TrustedProxyHops: 1}
+	}
+	if err := base().validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
 	}
 	bad := []*Config{
-		{Transport: "bogus", SMTPEncryption: "starttls", RateLimitPerHour: 1},
-		{Transport: "smtp", SMTPEncryption: "rot13", RateLimitPerHour: 1},
-		{Transport: "smtp", SMTPEncryption: "starttls", RateLimitPerHour: 0},
+		{Transport: "bogus", SMTPEncryption: "starttls", RateLimitPerHour: 1, GlobalRateLimitPerHour: 1, GitHubDailyCap: 1, TrustedProxyHops: 1},
+		{Transport: "smtp", SMTPEncryption: "rot13", RateLimitPerHour: 1, GlobalRateLimitPerHour: 1, GitHubDailyCap: 1, TrustedProxyHops: 1},
+		{Transport: "smtp", SMTPEncryption: "starttls", RateLimitPerHour: 0, GlobalRateLimitPerHour: 1, GitHubDailyCap: 1, TrustedProxyHops: 1},
+		{Transport: "smtp", SMTPEncryption: "starttls", RateLimitPerHour: 1, GlobalRateLimitPerHour: 0, GitHubDailyCap: 1, TrustedProxyHops: 1},
+		{Transport: "smtp", SMTPEncryption: "starttls", RateLimitPerHour: 1, GlobalRateLimitPerHour: 1, GitHubDailyCap: 0, TrustedProxyHops: 1},
+		{Transport: "smtp", SMTPEncryption: "starttls", RateLimitPerHour: 1, GlobalRateLimitPerHour: 1, GitHubDailyCap: 1, TrustedProxyHops: 0},
 	}
 	for i, c := range bad {
 		if err := c.validate(); err == nil {

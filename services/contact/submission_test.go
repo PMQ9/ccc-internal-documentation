@@ -120,3 +120,59 @@ func TestIssueBody(t *testing.T) {
 		}
 	}
 }
+
+// mdFence must preserve content verbatim while wrapping it in a backtick fence,
+// so a submission can't smuggle @mentions / #refs / images / HTML into the
+// GitHub tracker as live Markdown (issue #41).
+func TestMdFenceNeutralizesMarkdown(t *testing.T) {
+	for _, in := range []string{
+		"@maintainer please look",
+		"see #1 and #42",
+		"![x](https://attacker.example/p.png)",
+		"<img src=x onerror=alert(1)>",
+	} {
+		out := mdFence(in)
+		if !strings.Contains(out, in) {
+			t.Errorf("mdFence dropped content for %q: %q", in, out)
+		}
+		if !strings.HasPrefix(out, "```") || !strings.HasSuffix(out, "```") {
+			t.Errorf("mdFence did not wrap %q in a fence: %q", in, out)
+		}
+	}
+}
+
+// A payload containing its own fence must get a longer fence, or it could break
+// out of the block and reach live Markdown again.
+func TestMdFenceOutgrowsInternalBackticks(t *testing.T) {
+	in := "evil\n```\n@everyone\n```"
+	out := mdFence(in)
+	if !strings.HasPrefix(out, "````") { // 4 backticks > the internal run of 3
+		t.Errorf("fence not longer than the internal backtick run: %q", out)
+	}
+	if !strings.Contains(out, in) {
+		t.Errorf("content not preserved: %q", out)
+	}
+}
+
+func TestMdFenceEmpty(t *testing.T) {
+	if got := mdFence(""); got != "_(none provided)_" {
+		t.Errorf("mdFence(\"\") = %q, want the placeholder", got)
+	}
+}
+
+// The whole issue body must fence every submitter-controlled field, and carry the
+// note that fields are unrendered.
+func TestIssueBodyFencesUntrustedFields(t *testing.T) {
+	sub := &Submission{
+		Kind: kindBug, Name: "@everyone", Email: "a@vanderbilt.edu",
+		Page: "#1", Summary: "ping @team", Details: "![x](http://evil/p.png)",
+		At: time.Date(2026, 6, 6, 14, 30, 0, 0, time.UTC),
+	}
+	body := sub.issueBody("CCC Wiki")
+	if !strings.Contains(body, "```\n@everyone <a@vanderbilt.edu>\n```") {
+		t.Errorf("From line not fenced verbatim:\n%s", body)
+	}
+	if !strings.Contains(body, "verbatim and unrendered") {
+		t.Error("issue body missing the verbatim-content note")
+	}
+}

@@ -29,7 +29,7 @@ take it to AWS.
 Staff (on VPN, logged into the wiki)
   → header "Contact / Feedback" link → GET  /contact      (branded form + CSRF cookie)
   → POST /contact/submit
-       guards: VPN + login-gated link · @vanderbilt.edu · CSRF · honeypot · rate-limit · fixed recipient
+       guards: VPN + login-gated link · @vanderbilt.edu · CSRF · honeypot · body cap · rate limits · fixed recipient
        ├─ email  → To = CONTACT_RECIPIENT, Reply-To = submitter   (transport below)
        └─ issue  → GitHub (best-effort; never blocks the email)
   → success page
@@ -40,9 +40,26 @@ Staff (on VPN, logged into the wiki)
 "Reply" reaches the person); plain-text body with Type / From / Submitted /
 Page / Summary / Details.
 
-**GitHub contract.** Title = the subject; body = the same fields (Markdown);
-label by type: `bug→bug`, `request→enhancement`, `feedback→feedback`,
-`other→question`.
+**GitHub contract.** Title = the subject; body = the same fields, each wrapped
+verbatim in a Markdown code fence (so a submission can't inject `@mentions`,
+`#refs`, images, or markup into the tracker); label by type: `bug→bug`,
+`request→enhancement`, `feedback→feedback`, `other→question`.
+
+## Abuse controls (issue #41)
+
+The form is the most-attacked surface, so it is hardened beyond the basic guards:
+
+| Control | What it does | Knob (default) |
+|---|---|---|
+| Body-size cap | Request body capped at 64 KiB **before** parsing, so an oversized POST can't buffer megabytes in RAM (returns **413**). | fixed |
+| Per-IP rate limit | Submissions/hour from one source IP (returns **429**). | `CONTACT_RATE_LIMIT_PER_HOUR` (20) |
+| Global circuit-breaker | Aggregate submissions/hour across **all** IPs — caps total volume even when no single IP is over its limit; trips fail-safe (**429**), auto-resets. | `CONTACT_GLOBAL_RATE_LIMIT_PER_HOUR` (100) |
+| GitHub daily cap | Max issues filed/24h; over the cap the **email still sends**, only the issue is skipped. | `CONTACT_GITHUB_DAILY_CAP` (50) |
+| Trusted-proxy IP | Behind the ALB the client IP is read from `X-Forwarded-For` counting from the **right**, so a client can't forge it to evade limits or spoof the audit IP; the limiter map self-evicts so spoofed keys can't exhaust memory. | `CONTACT_TRUST_PROXY` (false) · `CONTACT_TRUSTED_PROXY_HOPS` (1) |
+| Security headers | Every response carries a CSP, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and `frame-ancestors 'none'` / `X-Frame-Options: DENY` (anti-clickjacking). | fixed |
+
+Not yet done (tracked separately): an optional CAPTCHA for bot pressure and a CSP
+nonce to drop `'unsafe-inline'` — see the issue-#41 follow-up.
 
 ## Choosing a transport
 
@@ -156,6 +173,8 @@ VUIT to authorize SES in Vanderbilt SPF/DKIM/DMARC.
 | Submit returns 502 | Transport rejected the send. `docker compose logs contact` — bad API key / app password / blocked auth. |
 | Submit returns 400 | Validation: non-`@vanderbilt.edu` sender, missing required field. |
 | Submit returns 403 | CSRF cookie/field mismatch — reload the form (cookies enabled?). |
+| Submit returns 413 | Body over the 64 KiB cap — shorten the submission. |
+| Submit returns 429 | Rate limited (per-IP or the global circuit-breaker) — wait and retry; tune `CONTACT_RATE_LIMIT_PER_HOUR` / `CONTACT_GLOBAL_RATE_LIMIT_PER_HOUR`. |
 | Mail not arriving | Check Junk + add the sender to Safe Senders; confirm `CONTACT_RECIPIENT`; check AgentMail/relay dashboards. |
 | No header link in the wiki | `CONTACT_URL` unset in `.env`, or re-run `make apply-theme`. |
 | GitHub issue not filed | Non-fatal by design — `docker compose logs contact`; verify PAT scope + `CONTACT_GITHUB_REPO`. |

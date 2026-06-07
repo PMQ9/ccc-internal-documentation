@@ -155,3 +155,48 @@ mh_hdr() { curl -s "$MH_BASE/api/v2/messages" | jq -r ".items[0].Content.Headers
   rm -f "$jar"
   assert_status 400 "$output" "missing summary must be 400"
 }
+
+@test "T-020 oversized body is rejected (413), nothing sent (issue #41)" {
+  mh_clear
+  jar="$(mktemp)"
+  token="$(get_token "$jar")"
+  big="$(head -c 70000 /dev/zero | tr '\0' A)" # > the 64 KiB body cap
+  run curl -s -b "$jar" -o /dev/null -w '%{http_code}' \
+    --data-urlencode "_csrf=$token" --data-urlencode "type=bug" \
+    --data-urlencode "name=Jane" --data-urlencode "email=jane@vanderbilt.edu" \
+    --data-urlencode "summary=big" --data-urlencode "details=$big" \
+    "$C_BASE/contact/submit"
+  rm -f "$jar"
+  assert_status 413 "$output" "oversized body must be 413"
+  sleep 1
+  assert_equal "0" "$(mh_total)" "oversized submission must not be sent"
+}
+
+@test "T-020 responses carry defense-in-depth security headers (issue #41)" {
+  run curl -s -D - -o /dev/null "$C_BASE/contact"
+  assert_contains "$output" "Content-Security-Policy:" "CSP header must be set"
+  assert_contains "$output" "X-Content-Type-Options: nosniff" "nosniff must be set"
+  assert_contains "$output" "frame-ancestors 'none'" "CSP must block framing"
+}
+
+@test "T-020 a submission with @ and # still delivers (tracker safety is unit-tested)" {
+  # The submitter can legitimately type @ and #; that must not be blocked. The
+  # GitHub-issue Markdown neutralization (fencing) is covered by the Go unit tests
+  # (the issue channel isn't wired in this MailHog-only stack).
+  mh_clear
+  jar="$(mktemp)"
+  token="$(get_token "$jar")"
+  run curl -s -b "$jar" -o /dev/null -w '%{http_code}' \
+    --data-urlencode "_csrf=$token" --data-urlencode "type=feedback" \
+    --data-urlencode "name=@everyone" --data-urlencode "email=jane@vanderbilt.edu" \
+    --data-urlencode "summary=ping @team" --data-urlencode "details=see #1" \
+    "$C_BASE/contact/submit"
+  rm -f "$jar"
+  assert_status 200 "$output" "a submission containing @ and # must still be accepted"
+  delivered=""
+  for _ in $(seq 1 15); do
+    [ "$(mh_total)" = "1" ] && { delivered=1; break; }
+    sleep 1
+  done
+  [ -n "$delivered" ] || flunk "expected the @mention submission to deliver one email"
+}
