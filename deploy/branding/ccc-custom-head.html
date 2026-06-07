@@ -387,10 +387,23 @@
       if (m) m.setAttribute("content", "#1C1C1C");
     }
 
-    /* (2) Apply ASAP, in <head>, before the body paints — avoids a flash. */
-    apply(resolveDark());
+    /* (2) Resolve the initial theme. Resolution order: cookie → localStorage →
+       OS default (matchMedia). The server-rendered class is a tiebreaker for an
+       edge case the cookie alone can't resolve: the user may have toggled on a
+       settings.category page where our script is stripped, updating the server
+       pref but not the cookie. When the cookie disagrees with the server AND
+       represents an explicit (not OS-following) choice, the server was toggled
+       more recently — respect it and sync the cookie. (#46) */
+    var resolved = resolveDark();
+    var explicitChoice = choice();
+    if (explicitChoice && serverDark !== resolved) {
+      persist(serverDark ? "dark" : "light");
+      apply(serverDark);
+    } else {
+      apply(resolved);
+    }
 
-    /* (2) Converge the two stores so this origin and the cross-port contact page
+    /* (2b) Converge the two stores so this origin and the cross-port contact page
        agree: a pre-cookie localStorage choice backfills the cookie, and a cookie
        set on the contact page syncs back into this origin's localStorage. Having
        no choice writes nothing — absence is precisely what "follow the OS" means. */
@@ -414,12 +427,28 @@
       }
     }
 
-    function setExplicit(dark) { persist(dark ? "dark" : "light"); apply(dark); refreshToggles(); }
+    /* Sync the client's explicit toggle to BookStack's server-side preference so
+       settings.category pages (which strip our custom head — see issue #46) render
+       the correct mode. Fire-and-forget; the instant client switch already happened
+       and is not gated on this. The form's CSRF token is captured via FormData;
+       errors are silently swallowed — a network hiccup never breaks the toggle. */
+    function syncServerPref() {
+      try {
+        var form = document.querySelector('form[action$="/preferences/toggle-dark-mode"]');
+        if (form) {
+          var fd = new FormData(form);
+          fetch(form.action, { method: 'POST', body: fd }).catch(function(){});
+        }
+      } catch (e) {}
+    }
+
+    function setExplicit(dark) { persist(dark ? "dark" : "light"); apply(dark); refreshToggles(); syncServerPref(); }
     function toggleTheme() { setExplicit(!isDark()); }
 
     /* (1) Adopt BookStack's own toggle form(s): take over the click so the
        switch is instant (no server round-trip / reload) and drives the single
-       client-side source of truth. */
+       client-side source of truth. The server pref is synced in the background
+       (syncServerPref) so settings.category pages render the correct mode. */
     function adoptBookstackToggles() {
       var forms = document.querySelectorAll('form[action$="/preferences/toggle-dark-mode"]');
       for (var i = 0; i < forms.length; i++) {
