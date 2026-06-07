@@ -164,13 +164,15 @@
   /* Links on the chrome surface: in light mode Oak-on-cream is ~4.20:1 (below
      AA). Override `--color-link` to black here, so sidebar links that use
      BookStack's default link color resolve to black (15.8:1 on cream).
-     Entity-colored links (book green / page blue) have their own explicit color
-     and are unaffected. The `:root:not(.dark-mode)` guard leaves dark mode on
-     Flat Gold (8.9:1 on #111). */
+     Entity-colored links (book green / page blue) carry an explicit `color` with
+     their own variable (e.g. `--color-page`) and are unaffected — verified
+     against BookStack v26.05 `_colors.scss` lines 72-88.
+     A `:root:not(.dark-mode)` guard is required because `--color-link` is also
+     used on the white content body where Oak is AA (4.65:1) and must stay Oak.
+     The guard drops out in dark mode, leaving the Flat Gold (8.9:1 on #111)
+     inherited from `:root.dark-mode`. */
   :root:not(.dark-mode) .tri-layout-left,
-  :root:not(.dark-mode) .tri-layout-right,
-  :root:not(.dark-mode) .tri-layout-left-contents,
-  :root:not(.dark-mode) .tri-layout-right-contents {
+  :root:not(.dark-mode) .tri-layout-right {
     --color-link: var(--ccc-black);
   }
 
