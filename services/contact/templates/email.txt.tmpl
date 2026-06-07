@@ -1,0 +1,15 @@
+Type:       {{.KindLabel}}
+From:       {{.Name}} <{{.Email}}>
+Submitted:  {{.At}}
+{{- if .Page}}
+Page/Area:  {{.Page}}
+{{- end}}
+------------------------------------------------------------
+Summary:    {{.Summary}}
+
+Details:
+{{.Details}}
+------------------------------------------------------------
+Sent by the {{.WikiName}} contact form.
+Reply to this email to respond directly to {{.Name}} ({{.Email}}).
+Meta: source IP {{.SourceIP}} | user-agent {{.UserAgent}}

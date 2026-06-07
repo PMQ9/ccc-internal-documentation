@@ -19,6 +19,7 @@ TRIVY_IMG     := aquasec/trivy:0.71.0
 CHECKOV_IMG   := bridgecrew/checkov:3.2.532
 GITLEAKS_IMG  := ghcr.io/gitleaks/gitleaks:v8.30.1
 LYCHEE_IMG    := lycheeverse/lychee:0.15.1
+GO_IMG        := golang:1.23-alpine
 
 DKR := docker run --rm -v "$(PWD)":/work -w /work
 DKR_TF := docker run --rm -v "$(PWD)/terraform":/tf -w /tf
@@ -93,6 +94,10 @@ pins: ## assert pins don't float + Makefile tool pins == CI pins (single source 
 user-data-contract: ## assert rendered user-data fetches secrets (bakes none)
 	./tests/lib/check_user_data_contract.sh
 
+.PHONY: contact-test
+contact-test: ## go test the contact service (unit; no network, no deps, via pinned go image)
+	$(DKR) -w /work/services/contact $(GO_IMG) go test ./...
+
 # ---- deploy (developer action; touches a remote host, so NOT in `check`) ----
 .PHONY: deploy
 deploy: ## rsync working tree to connor-server + (re)launch the stack (reuses dev-up.sh)
@@ -104,7 +109,7 @@ apply-theme: ## re-apply the CCC brand (head + logo/favicon/color) to the runnin
 
 # ---- aggregates -------------------------------------------------------------
 .PHONY: check
-check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract ## all static/IaC gates
+check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract contact-test ## all static/IaC gates
 
 .PHONY: integration
 integration: ## integration suite (PR profile)

@@ -78,6 +78,47 @@ services:
       - "${HTTP_BIND:-80}:80"
     restart: unless-stopped
 
+  # Contact-form service (issue #15): serves the form + emails CONTACT_RECIPIENT
+  # and (optionally) files a GitHub issue. Behind a compose profile so it only
+  # runs when asked (dev-up.sh sets COMPOSE_PROFILES=contact); the isolated
+  # integration stack leaves it out. Every var has a default so the stack renders
+  # even before credentials are filled in — it then serves the form and returns
+  # 503 on submit rather than crash-looping. Source: ../../services/contact.
+  contact:
+    build: ../../services/contact
+    image: ccc-wiki-contact:local
+    container_name: ccc-wiki-contact
+    profiles: ["contact"]
+    environment:
+      - CONTACT_LISTEN=:8080
+      - CONTACT_RECIPIENT=${CONTACT_RECIPIENT:-}
+      - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-}
+      - MAIL_FROM_NAME=${MAIL_FROM_NAME:-CCC Wiki Contact}
+      - CONTACT_WIKI_NAME=${APP_NAME:-CCC Wiki}
+      - CONTACT_ALLOWED_EMAIL_DOMAIN=${CONTACT_ALLOWED_EMAIL_DOMAIN:-vanderbilt.edu}
+      - CONTACT_ALLOWED_SENDERS=${CONTACT_ALLOWED_SENDERS:-}
+      - MAIL_TRANSPORT=${MAIL_TRANSPORT:-smtp}
+      - MAIL_HOST=${MAIL_HOST:-}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_ENCRYPTION=${MAIL_ENCRYPTION:-starttls}
+      - MS_TENANT_ID=${MS_TENANT_ID:-}
+      - MS_CLIENT_ID=${MS_CLIENT_ID:-}
+      - MS_CLIENT_SECRET=${MS_CLIENT_SECRET:-}
+      - MS_SENDER_UPN=${MS_SENDER_UPN:-}
+      - AGENTMAIL_API_KEY=${AGENTMAIL_API_KEY:-}
+      - AGENTMAIL_INBOX=${AGENTMAIL_INBOX:-}
+      - AGENTMAIL_API_BASE=${AGENTMAIL_API_BASE:-https://api.agentmail.to}
+      - CONTACT_INTAKE_GITHUB_TOKEN=${CONTACT_INTAKE_GITHUB_TOKEN:-}
+      - CONTACT_GITHUB_REPO=${CONTACT_GITHUB_REPO:-}
+      - CONTACT_RATE_LIMIT_PER_HOUR=${CONTACT_RATE_LIMIT_PER_HOUR:-20}
+      - CONTACT_TRUST_PROXY=${CONTACT_TRUST_PROXY:-false}
+      - CONTACT_SECURE_COOKIE=${CONTACT_SECURE_COOKIE:-false}
+    ports:
+      - "${CONTACT_BIND:-8081}:8080"
+    restart: unless-stopped
+
 volumes:
   db_data:
   bookstack_config:

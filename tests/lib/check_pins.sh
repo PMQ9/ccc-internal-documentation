@@ -30,8 +30,8 @@ echo "pin check:"
 
 # 1. No floating ':latest' in committed prod config (comment lines excluded; the documented
 #    appkey-gen command in a comment legitimately uses :latest).
-m="$(grep -hE ':latest' "$ROOT/deploy/local/.env.example" "$VARS" | grep -vE '^[[:space:]]*#' || true)"
-if [ -n "$m" ]; then bad "floating :latest in committed config: $m"; else note "no :latest in .env.example/variables.tf"; fi
+m="$(grep -hE ':latest' "$ROOT/deploy/local/.env.example" "$VARS" "$ROOT/services/contact/Dockerfile" | grep -vE '^[[:space:]]*#' || true)"
+if [ -n "$m" ]; then bad "floating :latest in committed config: $m"; else note "no :latest in .env.example/variables.tf/contact Dockerfile"; fi
 
 # 2. No floating 'releases/latest' in the EC2 bootstrap — pin docker_compose_version instead.
 #    Comment lines excluded (the rationale comment legitimately names the pattern it forbids).

@@ -30,17 +30,34 @@ for f in "$HEAD_FILE" "$LOGO_FILE" "$FAVICON_FILE"; do
   fi
 done
 
+# Resolve the contact-form URL (config-as-code): an env override wins, else read
+# it from the compose .env, else empty. The head carries a __CCC_CONTACT_URL__
+# placeholder we substitute so the "Contact / Feedback" header link points at the
+# live service (and is omitted entirely when the URL is unset).
+CONTACT_URL="${CONTACT_URL:-}"
+if [ -z "$CONTACT_URL" ] && [ -f .env ]; then
+  CONTACT_URL="$(grep -E '^CONTACT_URL=' .env 2> /dev/null | head -1 | cut -d= -f2- || true)"
+fi
+
 # 1. Stage files INTO the container: the head to a transient per-run path ($$ avoids a shared-file
 #    race), the logo/favicon into the persistent uploads volume (they are served as static files, and
 #    placing them here bypasses the UI's SVG-upload block). -T so exec doesn't eat our stdin.
 stage="/tmp/ccc-head.$$.html"
-cleanup() { docker compose exec -T "$SVC" rm -f "$stage" > /dev/null 2>&1 || true; }
+head_rendered="$(mktemp)"
+cleanup() {
+  docker compose exec -T "$SVC" rm -f "$stage" > /dev/null 2>&1 || true
+  rm -f "$head_rendered" 2> /dev/null || true
+}
 trap cleanup EXIT
+
+# Render a local copy of the head with the contact URL substituted, then stage THAT.
+url_repl="$(printf '%s' "$CONTACT_URL" | sed -e 's/[&|\\]/\\&/g')"
+sed "s|__CCC_CONTACT_URL__|${url_repl}|g" "$HEAD_FILE" > "$head_rendered"
 
 stage_into() { docker compose exec -T "$SVC" sh -c "cat > '$2'" < "$1"; } # <local-file> <container-path>
 
 if ! docker compose exec -T "$SVC" sh -c "mkdir -p '$IMG_DIR'" \
-  || ! stage_into "$HEAD_FILE" "$stage" \
+  || ! stage_into "$head_rendered" "$stage" \
   || ! stage_into "$LOGO_FILE" "$IMG_DIR/ccc-logo.svg" \
   || ! stage_into "$FAVICON_FILE" "$IMG_DIR/ccc-favicon.svg"; then
   echo "!! apply-brand: could not copy brand files into the '$SVC' container (is the stack up?)" >&2

@@ -52,6 +52,29 @@ persistent volume** (EFS, not S3 — sidesteps BookStack's public-read-image-on-
 Block-Public-Access, and survives instance replacement); **Balanced** cost/HA (Multi-AZ DB, single
 NAT, trimmed endpoints); Terraform IaC.
 
+## Contact form (issue #15)
+
+BookStack has no form handler and sanitizes page HTML, so the **Contact / Feedback** page is served
+by a small, separate, standard-library Go service ([`services/contact/`](../services/contact/)) and
+linked from the wiki header (a link injected via `app-custom-head` by `apply-brand.sh`). One
+submission becomes one email to the CCC mailbox (`Reply-To` = the submitter) plus, optionally, one
+GitHub issue (best-effort — a GitHub outage never blocks the email). It owns no database.
+
+**Transport is pluggable** (`MAIL_TRANSPORT`): `agentmail` (recommended — an email API for agents
+that sends from an authenticated `agentmail.to` inbox, so no DMARC rejection and no IT), `smtp` (Gmail
+App Password / own-domain + Brevo / AWS SES), or `graph` (M365 send-as, needs an Entra app
+registration). The forcing constraint: you cannot send *as* `@vanderbilt.edu` without VUIT, and
+free-webmail / Proton senders are refused by relays on **DMARC** — so the `From` is a service identity
+and the submitter is carried in `Reply-To`. Setup, transport trade-offs, and the AWS wiring (kept out
+of Terraform until the AWS phase so the IaC can be validated) are in
+[runbooks/contact-form.md](runbooks/contact-form.md).
+
+**Security — honest framing.** Proportionate for an internal VPN-only tool, *not* cryptographic proof
+of the submitter's wiki identity (that needs SAML/BookStack integration — a documented future
+hardening): reachable only on the VPN, link shown only to logged-in users, `@vanderbilt.edu` (or an
+explicit allowlist) required, a synchronizer CSRF token + honeypot + per-IP rate-limit, and a **fixed
+recipient** (never an open relay).
+
 ## BookStack configuration (the load-bearing bits)
 
 - **Public read** is a UI toggle ("Allow public viewing") + the **Public** role granted View only —

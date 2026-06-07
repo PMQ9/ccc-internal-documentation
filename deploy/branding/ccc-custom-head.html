@@ -441,6 +441,46 @@
   })();
 </script>
 
+<script id="ccc-contact-link">
+  /* ----------------------------------------------------------------------
+     Inject a "Contact / Feedback" link into the BookStack header. The URL is
+     substituted at deploy time by apply-brand.sh (config-as-code, from
+     CONTACT_URL). If it is left as the placeholder or empty — e.g. this head was
+     pasted by hand, or the contact service isn't wired — no link is added.
+     Network-free and dependency-free, like the rest of this file. (Issue #15.)
+     ---------------------------------------------------------------------- */
+  (function () {
+    "use strict";
+    var url = "__CCC_CONTACT_URL__";
+    if (!url || url.indexOf("__CCC_") === 0) return; // unsubstituted/unset -> skip
+
+    function inject() {
+      if (document.querySelector(".ccc-contact-link")) return; // idempotent
+      // BookStack groups its top-bar links in header .header-links .links; fall
+      // back outward if a future version restructures the header.
+      var host = document.querySelector("header .header-links .links")
+        || document.querySelector("header .header-links")
+        || document.querySelector("header nav")
+        || document.querySelector("header");
+      if (!host) return;
+      var a = document.createElement("a");
+      a.className = "ccc-contact-link";
+      a.href = url;
+      a.textContent = "Contact / Feedback";
+      // Light inline styling so it reads as a header link even if it lands
+      // outside the styled link list; inherits the header's white-on-black.
+      a.style.color = "#fff";
+      a.style.display = "inline-flex";
+      a.style.alignItems = "center";
+      a.style.padding = "0 12px";
+      a.style.whiteSpace = "nowrap";
+      host.appendChild(a);
+    }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", inject);
+    else inject();
+  })();
+</script>
+
 <!--
   LOGO / FAVICON / APP ICON  (upload via Settings → Customization — see ./README.md):
     Logo     → ./assets/ccc-logo-reversed.svg   (white text; pairs with the black header above)

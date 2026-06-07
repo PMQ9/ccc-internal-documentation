@@ -20,6 +20,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Bring up the contact-form service (issue #15) alongside BookStack. It lives
+# behind a compose profile so plain `docker compose up` (and the isolated test
+# runner) skip it; here we opt in. Override with COMPOSE_PROFILES= to skip.
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:-contact}"
+
 FRESH=0
 for arg in "$@"; do
   case "$arg" in
@@ -54,6 +59,11 @@ DB_PASSWORD=app-$(openssl rand -hex 12)
 AUTH_METHOD=standard
 AUTH_AUTO_INITIATE=false
 REVISION_LIMIT=false
+# Contact-form service (issue #15). The header link points here; fill in mail
+# creds (Brevo SMTP) + CONTACT_RECIPIENT to actually deliver — see
+# config/.env.example and docs/runbooks/contact-form.md.
+CONTACT_BIND=8081
+CONTACT_URL=http://localhost:8081/contact
 EOF
 fi
 
@@ -71,11 +81,15 @@ fi
 # PULL=1 refreshes pinned images first (used by deploys so a bumped BOOKSTACK_TAG /
 # MARIADB_TAG in .env is actually fetched). Default off so local dev stays fast/offline.
 if [ "${PULL:-0}" = "1" ]; then
-  echo "==> PULL=1: docker compose pull"
-  docker compose pull
+  # --ignore-buildable: the contact service is built locally (no registry image),
+  # so pulling it would 404. Pull only the upstream pinned images here.
+  echo "==> PULL=1: docker compose pull (upstream images; locally-built ones are built on up)"
+  docker compose pull --ignore-buildable
 fi
-echo "==> docker compose up -d"
-docker compose up -d
+# --build (re)builds locally-built services (the contact service) from the synced
+# source so code changes take effect; a no-op for the pulled BookStack/MariaDB images.
+echo "==> docker compose up -d --build"
+docker compose up -d --build
 
 # --- 4. wait until BookStack serves (DB-free static asset, like the prod health check) ---
 echo "==> waiting for BookStack at ${app_url} (first-run migrations can take ~30s) ..."

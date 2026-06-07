@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Contact / Feedback — {{.WikiName}}</title>
+  <style>
+    /* Self-contained + network-free (same VPN-only constraint as the wiki brand).
+       CCC palette mirrored from deploy/branding/ccc-custom-head.html. */
+    :root {
+      --ink: #1c1c1c; --surface: #ffffff; --chrome: #f5f3ef;
+      --oak: #946e24; --border: #d9d4ca; --err: #b3261e; --muted: #555;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #f3f1ec; --surface: #1f1f1f; --chrome: #161616;
+              --oak: #d8b65a; --border: #3a3a3a; --err: #f2a097; --muted: #aaa; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--chrome); color: var(--ink);
+           font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    header { background: #1c1c1c; color: #fff; padding: 16px 20px; border-bottom: 3px solid var(--oak); }
+    header h1 { margin: 0; font: 600 18px/1.3 Georgia, "Times New Roman", serif; }
+    main { max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    p.lede { color: var(--muted); margin-top: 0; }
+    label { display: block; font-weight: 600; margin: 16px 0 4px; }
+    .req { color: var(--oak); }
+    input, select, textarea {
+      width: 100%; padding: 10px; font: inherit; color: var(--ink);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    textarea { min-height: 140px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { outline: 3px solid var(--oak); outline-offset: 1px; }
+    .hint { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+    .field-err { color: var(--err); font-size: 14px; margin: 4px 0 0; }
+    .banner { border-radius: 6px; padding: 12px 14px; margin-bottom: 16px; }
+    .banner.error { background: rgba(179,38,30,0.12); border: 1px solid var(--err); }
+    .banner.warn  { background: rgba(148,110,36,0.12); border: 1px solid var(--oak); }
+    button { margin-top: 20px; background: var(--oak); color: #fff; border: 0; border-radius: 6px;
+             padding: 12px 20px; font: 600 16px inherit; cursor: pointer; }
+    button:hover { filter: brightness(1.08); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    /* Honeypot: off-screen, untabbable, hidden from AT. Bots fill it; humans don't. */
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <header><h1>{{.WikiName}} — Contact / Feedback</h1></header>
+  <main>
+    <div class="card">
+      <p class="lede">Send a request, bug report, or feedback to the CCC admin team. We read every message.</p>
+
+      {{if .GeneralError}}<div class="banner error">{{.GeneralError}}</div>{{end}}
+      {{if not .Ready}}<div class="banner warn">Heads up: email delivery isn't fully configured yet, so submitting may not work. You can email <strong>{{.Recipient}}</strong> directly in the meantime.</div>{{end}}
+
+      <form method="post" action="/contact/submit" novalidate>
+        <input type="hidden" name="{{.Honeypot}}" value="" tabindex="-1" autocomplete="off" aria-hidden="true" class="hp">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        {{$type := index .Values "type"}}
+        <label for="type">Type <span class="req">*</span></label>
+        <select id="type" name="type" required>
+          <option value="" {{if eq $type ""}}selected{{end}} disabled>Choose…</option>
+          {{range .Kinds}}<option value="{{.Value}}" {{if eq .Value $type}}selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+        {{with index .Errors "type"}}<p class="field-err">{{.}}</p>{{end}}
+
+        <label for="name">Your name <span class="req">*</span></label>
+        <input id="name" name="name" value="{{index .Values "name"}}" maxlength="200" required>
+        {{with index .Errors "name"}}<p class="field-err">{{.}}</p>{{end}}
+
+        <label for="email">Your email <span class="req">*</span></label>
+        <input id="email" name="email" type="email" value="{{index .Values "email"}}" maxlength="320" required>
+        {{if .AllowedDomain}}<p class="hint">Use your @{{.AllowedDomain}} address. We reply to this address.</p>{{else}}<p class="hint">We reply to this address.</p>{{end}}
+        {{with index .Errors "email"}}<p class="field-err">{{.}}</p>{{end}}
+
+        <label for="page">Page or area (optional)</label>
+        <input id="page" name="page" value="{{index .Values "page"}}" maxlength="500" placeholder="e.g. the page URL this is about">
+        {{with index .Errors "page"}}<p class="field-err">{{.}}</p>{{end}}
+
+        <label for="summary">Summary <span class="req">*</span></label>
+        <input id="summary" name="summary" value="{{index .Values "summary"}}" maxlength="200" required placeholder="One line describing it">
+        {{with index .Errors "summary"}}<p class="field-err">{{.}}</p>{{end}}
+
+        <label for="details">Details</label>
+        <textarea id="details" name="details" maxlength="8000" placeholder="Steps to reproduce, what you expected, anything that helps">{{index .Values "details"}}</textarea>
+        {{with index .Errors "details"}}<p class="field-err">{{.}}</p>{{end}}
+
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </main>
+</body>
+</html>

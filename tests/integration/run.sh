@@ -166,6 +166,12 @@ BATS_FILES=(
   "$SCRIPT_DIR/bats/06_edge_input.bats"
   "$SCRIPT_DIR/bats/07_negative.bats"
 )
+# The contact-service test (issue #15) stands up its OWN isolated stack (contact +
+# MailHog) and builds the Go image, so only run it on the fuller profiles — not the
+# fast `bats` loop. It skips itself cleanly if Docker is unavailable.
+if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
+  BATS_FILES+=("$SCRIPT_DIR/bats/08_contact.bats")
+fi
 BATS_BIN="$(command -v bats || true)"
 if [ -z "$BATS_BIN" ]; then
   echo "bats not on PATH; fetching pinned bats-core ${BATS_VERSION:-1.13.0}…"

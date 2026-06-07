@@ -1,0 +1,4 @@
+# Keep the build context tiny + reproducible. Templates are go:embed'd at build
+# time, so they ARE copied (see Dockerfile); everything below is build-irrelevant.
+README.md
+*_test.go

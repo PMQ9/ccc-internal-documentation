@@ -1,0 +1,35 @@
+# Isolated stack for the contact-service integration test (08_contact.bats).
+# Builds services/contact and points it at a MailHog sink that captures SMTP so
+# the test can assert real delivery (To/Reply-To/Subject/X-CCC-Contact-Type)
+# without sending real mail. Own project name + high host ports so it never
+# collides with the BookStack test stack (port 8089) or a live local stack.
+name: ccc-wiki-contact-test
+
+services:
+  # MailHog: a throwaway SMTP sink with an HTTP API to inspect captured mail.
+  # Pinned (no :latest); the only place it is used.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    # SMTP on 1025 (reached over the compose network), HTTP API on 8025.
+    ports:
+      - "${MAILHOG_HTTP_PORT:-18025}:8025"
+
+  contact:
+    build: ../../../services/contact
+    image: ccc-wiki-contact:test
+    depends_on:
+      - mailhog
+    environment:
+      - CONTACT_LISTEN=:8080
+      - CONTACT_RECIPIENT=dest@example.org
+      - MAIL_FROM_ADDRESS=cccwiki.contact@gmail.com
+      - MAIL_FROM_NAME=CCC Wiki Contact
+      - CONTACT_WIKI_NAME=CCC Wiki
+      - CONTACT_ALLOWED_EMAIL_DOMAIN=vanderbilt.edu
+      - MAIL_TRANSPORT=smtp
+      - MAIL_HOST=mailhog
+      - MAIL_PORT=1025
+      - MAIL_ENCRYPTION=none
+      - CONTACT_RATE_LIMIT_PER_HOUR=100
+    ports:
+      - "${CONTACT_TEST_PORT:-18081}:8080"
