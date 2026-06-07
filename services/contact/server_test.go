@@ -180,6 +180,45 @@ func TestSubmitHappyPath(t *testing.T) {
 	}
 }
 
+// Issue #36: the GitHub tracking issue is still filed server-side for triage, but
+// its URL points at the private repo and a guessable issue number — an internal
+// detail that must never reach the submitter. This locks in both halves: the
+// issue IS created, and the success page does NOT leak it.
+func TestSuccessPageDoesNotLeakIssueURL(t *testing.T) {
+	const issueURL = "https://github.com/PMQ9/ccc-internal-documentation/issues/123"
+	var filed bool
+	ghAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		filed = true
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"html_url":"` + issueURL + `"}`))
+	}))
+	defer ghAPI.Close()
+
+	cfg := testConfig()
+	cfg.GitHubToken = "tok"
+	cfg.GitHubRepo = "PMQ9/ccc-internal-documentation"
+	cfg.GitHubAPIBase = ghAPI.URL
+	s, fm := newTestServer(t, cfg)
+
+	rec := post(s, validVals(), true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	if len(fm.sent) != 1 {
+		t.Fatalf("sent %d messages, want 1 (this must be the real success path, not the honeypot)", len(fm.sent))
+	}
+	if !filed {
+		t.Error("GitHub issue was not filed server-side — internal tracking must still happen")
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, issueURL) {
+		t.Error("success page leaked the internal tracking-issue URL to the submitter")
+	}
+	if strings.Contains(strings.ToLower(body), "tracking issue") {
+		t.Error("success page still mentions a tracking issue")
+	}
+}
+
 // The wiki writes its light/dark choice to a host-scoped ccc-color-scheme cookie
 // that reaches this cross-port service; we render the matching <html> class
 // server-side so there's no light-then-dark flash. Absence (or junk) => no class,

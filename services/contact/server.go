@@ -156,7 +156,7 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	// don't learn they were caught; send nothing.
 	if strings.TrimSpace(r.PostFormValue(honeypotField)) != "" {
 		s.log.Warn("contact honeypot tripped", "ip", ip)
-		s.renderSuccess(w, s.newSuccessView(r, ""))
+		s.renderSuccess(w, s.newSuccessView(r))
 		return
 	}
 
@@ -192,19 +192,19 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("contact email sent", "kind", string(sub.Kind), "from", sub.Email)
 
 	// GitHub issue is best-effort: a GitHub outage must never block feedback.
-	issueURL := ""
+	// Filed for internal tracking only — its URL is never surfaced to the
+	// submitter (issue #36), so we don't thread it into the success view.
 	if s.cfg.githubConfigured() {
 		ghCtx, ghCancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer ghCancel()
 		if u, err := s.gh.CreateIssue(ghCtx, s.buildIssue(sub)); err != nil {
 			s.log.Error("contact github issue failed (non-fatal)", "err", err)
 		} else {
-			issueURL = u
 			s.log.Info("contact github issue filed", "url", u)
 		}
 	}
 
-	s.renderSuccess(w, s.newSuccessView(r, issueURL))
+	s.renderSuccess(w, s.newSuccessView(r))
 }
 
 // ---- CSRF (stateless double-submit cookie) --------------------------------
@@ -277,7 +277,6 @@ type successView struct {
 	WikiURL    string
 	ThemeClass string // initial <html> class from the theme cookie (issue #39)
 	Recipient  string
-	IssueURL   string
 }
 
 func (s *server) newFormView(w http.ResponseWriter, r *http.Request, values, errs map[string]string, general string) formView {
@@ -304,13 +303,12 @@ func (s *server) renderForm(w http.ResponseWriter, status int, v formView) {
 // newSuccessView builds the success view with the brand fields filled in. Both
 // success paths (honeypot decoy + real send) go through here so neither can ship
 // the masthead without the "home"/"back to the wiki" links.
-func (s *server) newSuccessView(r *http.Request, issueURL string) successView {
+func (s *server) newSuccessView(r *http.Request) successView {
 	return successView{
 		WikiName:   s.cfg.WikiName,
 		WikiURL:    s.cfg.WikiURL,
 		ThemeClass: themeClass(r),
 		Recipient:  s.cfg.Recipient,
-		IssueURL:   issueURL,
 	}
 }
 
