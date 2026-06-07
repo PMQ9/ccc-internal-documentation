@@ -10,8 +10,8 @@ tests/
 ├── integration/
 │   ├── run.sh                    orchestrator: brings up an isolated stack, runs everything
 │   ├── helpers/load.bash         bats loader + tiny assertion helpers (no submodules)
-│   └── bats/*.bats               behavioral tests (gating, RBAC, revisions, media, edge, negative)
-└── stress/stress.py             concurrency/load driver (Python stdlib only)
+│   └── bats/*.bats               behavioral tests (gating, RBAC, revisions, agent-role, persistence, health, media, edge, negative, contact)
+└── stress/stress.py             concurrency/load driver (Python stdlib only) — read, edit, mixed modes
 terraform/tests/plan.tftest.hcl   IaC plan-time security/edge assertions (mocked providers)
 terraform/.tflint.hcl             tflint ruleset
 ```
@@ -31,10 +31,10 @@ Brings up an **isolated** copy of `deploy/local/compose.yaml` (its own compose
 project, volumes, and port `8089`), so it never touches a real local stack.
 
 ```bash
-# fast loop — bring up + behavioral bats only
+# fast loop — bring up + core behavioral bats only (00-07, skips contact/agent-role/health-DB-down/persistence)
 tests/integration/run.sh --profile bats
 
-# PR profile (default) — bats + stress + health-with-DB-down + persistence
+# PR profile (default) — bats + contact + agent-role + health-DB-down + persistence + stress
 tests/integration/run.sh
 
 # full drill — adds backup/restore + the down -v durability boundary (slow)
@@ -67,6 +67,8 @@ python3 tests/stress/stress.py --base-url http://localhost:8089 \
   --token "<id:secret>" --mode read  --concurrency 50 --per-worker 20
 python3 tests/stress/stress.py --base-url http://localhost:8089 \
   --token "<id:secret>" --mode edit  --page-id 1 --concurrency 8 --per-worker 5
+python3 tests/stress/stress.py --base-url http://localhost:8089 \
+  --token "<id:secret>" --mode mixed  --page-id 1 --concurrency 10 --per-worker 6
 ```
 
 ## Make targets

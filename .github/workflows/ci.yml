@@ -117,32 +117,37 @@ jobs:
           docker run --rm -v "$PWD":/work -w /work lycheeverse/lychee:0.15.1 \
             --offline --no-progress --exclude-path .github './**/*.md'
 
+  wiki-client:
+    name: wiki-client · gofmt + vet + test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: wiki-client core checks (gofmt, vet, race tests)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work/services/wiki-client golang:1.23-alpine sh -c '
+            test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
+            go vet ./...
+            apk add --no-cache gcc musl-dev >/dev/null
+            CGO_ENABLED=1 go test -race -count=1 ./...'
+
+  contact-unit:
+    name: contact · gofmt + vet + test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: contact service checks (gofmt, vet, race tests)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work/services/contact golang:1.23-alpine sh -c '
+            test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
+            go vet ./...
+            apk add --no-cache gcc musl-dev >/dev/null
+            CGO_ENABLED=1 go test -race -count=1 ./...'
+
   integration:
     name: integration · stack + bats + stress (PR profile)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: contact service checks (gofmt, vet, race tests)
-        # Mirrors `make contact-test` (gofmt + vet + test on the pinned GO_IMG) and
-        # adds the race detector — CI installs the C toolchain the alpine image lacks.
-        # The integration suite also builds the image (08_contact.bats), so a compile
-        # error fails here first.
-        run: |
-          docker run --rm -v "$PWD":/work -w /work/services/contact golang:1.23-alpine sh -c '
-            test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
-            go vet ./...
-            apk add --no-cache gcc musl-dev >/dev/null
-            CGO_ENABLED=1 go test -race ./...'
-      - name: wiki client core checks (gofmt, vet, race tests)
-        # Mirrors `make wiki-client-test` (gofmt + vet + test on the pinned GO_IMG) and
-        # adds the race detector — CI installs the C toolchain the alpine image lacks.
-        # This is the shared client core (issue #27) the CLI (#28) and MCP server (#29) import.
-        run: |
-          docker run --rm -v "$PWD":/work -w /work/services/wiki-client golang:1.23-alpine sh -c '
-            test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
-            go vet ./...
-            apk add --no-cache gcc musl-dev >/dev/null
-            CGO_ENABLED=1 go test -race ./...'
       - name: run integration suite
         run: tests/integration/run.sh --profile pr

@@ -178,6 +178,9 @@ func truncateRunes(s string, n int) string {
 	if len(r) <= n {
 		return s
 	}
+	if n <= 1 {
+		return "…"
+	}
 	return string(r[:n-1]) + "…"
 }
 
@@ -265,7 +268,11 @@ func (s *Submission) issueBody(wikiName string) string {
 	b.WriteString("\n\n**Summary:**\n")
 	b.WriteString(mdFence(s.Summary))
 	b.WriteString("\n\n**Details:**\n")
-	b.WriteString(mdFence(s.Details))
+	if s.Details == "" {
+		b.WriteString("_(nothing provided)_")
+	} else {
+		b.WriteString(mdFence(s.Details))
+	}
 	fmt.Fprintf(&b, "\n\n---\n_Filed automatically by the %s contact form. All submitter-supplied fields above are shown verbatim and unrendered. Reply to the email notification to reach the submitter._\n", wikiName)
 	return b.String()
 }

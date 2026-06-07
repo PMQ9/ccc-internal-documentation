@@ -172,3 +172,100 @@ func TestSMTPSendHonorsContextDeadline(t *testing.T) {
 		t.Fatal("Send hung past the context deadline — connection deadline not set")
 	}
 }
+
+func TestStripCRLFVariants(t *testing.T) {
+	if got := stripCRLF(""); got != "" {
+		t.Errorf("stripCRLF('') = %q", got)
+	}
+	if got := stripCRLF("no cr"); got != "no cr" {
+		t.Errorf("stripCRLF without CRLF = %q", got)
+	}
+	if got := stripCRLF("a\rb\nc\r\nd"); got != "abcd" {
+		t.Errorf("stripCRLF mixed = %q, want abcd", got)
+	}
+	if got := stripCRLF("\r\n\r\n"); got != "" {
+		t.Errorf("stripCRLF only CRLF = %q, want empty", got)
+	}
+}
+
+func TestRFC822EmptyHeaders(t *testing.T) {
+	m := &Message{
+		FromAddr: "from@test.com",
+		To:       "to@test.com",
+		Subject:  "test",
+		Body:     "body",
+	}
+	raw := string(m.rfc822(time.Date(2026, 6, 6, 14, 30, 0, 0, time.UTC)))
+	if !strings.Contains(raw, "From: from@test.com") {
+		t.Errorf("rfc822 missing From: %s", raw)
+	}
+	// No extra headers should appear.
+	if strings.Count(raw, "\r\n\r\n") != 1 {
+		t.Error("expected exactly one header-body separator")
+	}
+}
+
+func TestRFC822NonASCIIFromName(t *testing.T) {
+	m := &Message{
+		FromName: "José García",
+		FromAddr: "from@test.com",
+		To:       "to@test.com",
+		Subject:  "simple",
+		Body:     "body",
+	}
+	raw := string(m.rfc822(time.Date(2026, 6, 6, 14, 30, 0, 0, time.UTC)))
+	if strings.Contains(raw, "José") {
+		t.Error("non-ASCII FromName should be MIME-encoded")
+	}
+	if !strings.Contains(raw, "=?utf-8?q?") {
+		t.Error("FromName not Q-encoded")
+	}
+}
+
+func TestNewMailerSMTPDefaults(t *testing.T) {
+	m, err := newMailer(&Config{Transport: "smtp", SMTPPort: 587, SMTPEncryption: "none"})
+	if err != nil {
+		t.Fatalf("newMailer smtp: %v", err)
+	}
+	smtp, ok := m.(*smtpMailer)
+	if !ok {
+		t.Fatalf("expected *smtpMailer, got %T", m)
+	}
+	if smtp.encryption != "none" {
+		t.Errorf("encryption = %q, want none", smtp.encryption)
+	}
+}
+
+func TestNewMailerGraphDefaultsSender(t *testing.T) {
+	m, err := newMailer(&Config{
+		Transport: "graph", FromAddress: "from@test.com",
+		GraphTenantID: "t", GraphClientID: "i", GraphClientSecret: "s",
+	})
+	if err != nil {
+		t.Fatalf("newMailer graph: %v", err)
+	}
+	g, ok := m.(*graphMailer)
+	if !ok {
+		t.Fatalf("expected *graphMailer, got %T", m)
+	}
+	if g.sender != "from@test.com" {
+		t.Errorf("sender = %q, want from@test.com (FromAddress fallback)", g.sender)
+	}
+}
+
+func TestNewMailerGraphExplicitSender(t *testing.T) {
+	m, err := newMailer(&Config{
+		Transport: "graph", FromAddress: "from@test.com", GraphSenderUPN: "upn@test.com",
+		GraphTenantID: "t", GraphClientID: "i", GraphClientSecret: "s",
+	})
+	if err != nil {
+		t.Fatalf("newMailer graph: %v", err)
+	}
+	g, ok := m.(*graphMailer)
+	if !ok {
+		t.Fatalf("expected *graphMailer, got %T", m)
+	}
+	if g.sender != "upn@test.com" {
+		t.Errorf("sender = %q, want upn@test.com (explicit GraphSenderUPN)", g.sender)
+	}
+}

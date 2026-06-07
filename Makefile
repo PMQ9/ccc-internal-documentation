@@ -106,6 +106,11 @@ contact-test: ## gofmt + vet + go test the contact service (unit; no network/dep
 wiki-client-test: ## gofmt + vet + go test the shared wiki client core (unit; no network/deps, pinned go image)
 	$(DKR) -w /work/services/wiki-client $(GO_IMG) sh -c 'test -z "$$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }; go vet ./... && go test ./...'
 
+.PHONY: stress-mixed
+stress-mixed: ## mixed read-write stress test (T-024)
+	python3 tests/stress/stress.py --base-url http://localhost:8089 \
+	  --token "<id:secret>" --mode mixed --page-id 1 --concurrency 10 --per-worker 6
+
 # ---- deploy (developer action; touches a remote host, so NOT in `check`) ----
 .PHONY: deploy
 deploy: ## rsync working tree to connor-server + (re)launch the stack (reuses dev-up.sh)

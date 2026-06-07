@@ -172,6 +172,10 @@ BATS_FILES=(
 if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
   BATS_FILES+=("$SCRIPT_DIR/bats/08_contact.bats")
 fi
+# Agent role test (issue #27) — always on for PR/full, skip on quick bats loop.
+if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
+  BATS_FILES+=("$SCRIPT_DIR/bats/09_agent_role.bats")
+fi
 BATS_BIN="$(command -v bats || true)"
 if [ -z "$BATS_BIN" ]; then
   echo "bats not on PATH; fetching pinned bats-core ${BATS_VERSION:-1.13.0}…"
@@ -223,55 +227,88 @@ if [ "$STRESS" = "1" ] && { [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; };
   else
     ko "page unreadable after concurrent edits"
   fi
-fi
 
-# ---- T-016: health endpoint stays 200 with the DB down ----------------------
-if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
-  phase "T-016: /icon.png is 200 while the DB is DOWN (DB-free health check)"
-  dc stop db >/dev/null 2>&1
-  CODE_DBDOWN="$(http_status /icon.png)"
-  dc start db >/dev/null 2>&1
-  wait_for_db_healthy 120 || echo "  WARN: db slow to return healthy"
-  wait_for_http /login 200 180 || echo "  WARN: app slow to recover after db restart"
-  if [ "$CODE_DBDOWN" = "200" ]; then
-    ok "health endpoint served 200 with DB down (RDS failover won't churn the ASG)"
+  phase "Stress: mixed read-write (T-024)"
+  # Use the same page for mixed-mode: workers alternate read/write operations.
+  if python3 "$REPO_ROOT/tests/stress/stress.py" --base-url "$BASE_URL" --token "$ADMIN_TOKEN" \
+       --mode mixed --page-id "$PID" --concurrency 10 --per-worker 6; then
+    ok "mixed read-write: no 5xx, no transport errors"
   else
-    ko "health endpoint returned $CODE_DBDOWN with DB down (expected 200)"
+    ko "mixed read-write produced 5xx/transport errors"
   fi
 fi
 
-# ---- T-010: persistence across `down && up` (no -v) -------------------------
+# ---- T-016: health endpoint stays 200 with the DB down (bats) ----------------
+# Delegated to 11_health_db_down.bats which stops/starts db and asserts
+# /icon.png stays 200, then verifies app recovery.
+if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
+  phase "T-016: health endpoint with DB down (bats 11_health_db_down)"
+  if [ -n "$BATS_BIN" ] && [ -x "$BATS_BIN" ]; then
+    if "$BATS_BIN" --print-output-on-failure "$SCRIPT_DIR/bats/11_health_db_down.bats"; then
+      ok "health endpoint: /icon.png 200 with DB down, app recovers"
+    else
+      ko "health endpoint: check 11_health_db_down.bats output"
+    fi
+  else
+    # Fallback: inline check when bats is unavailable.
+    dc stop db >/dev/null 2>&1
+    CODE_DBDOWN="$(http_status /icon.png)"
+    dc start db >/dev/null 2>&1
+    wait_for_db_healthy 120 || echo "  WARN: db slow to return healthy"
+    wait_for_http /login 200 180 || echo "  WARN: app slow to recover after db restart"
+    if [ "$CODE_DBDOWN" = "200" ]; then
+      ok "health endpoint served 200 with DB down (RDS failover won't churn the ASG)"
+    else
+      ko "health endpoint returned $CODE_DBDOWN with DB down (expected 200)"
+    fi
+  fi
+fi
+
+# ---- T-010: persistence across `down && up` (no -v, via bats) ---------------
 if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
   phase "T-010: content + media survive 'down && up' (volume retained)"
-  PB=$(api POST /api/books '{"name":"Persist Book"}' | json '.id')
-  PP=$(api POST /api/pages "{\"book_id\":$PB,\"name\":\"Persist Page\",\"markdown\":\"# persist-marker-PERSIST\"}" | json '.id')
+
+  # Create fingerprint data that the bats tests will check after restart.
+  export PERSIST_BOOK_ID=$(api POST /api/books '{"name":"Persist Book"}' | json '.id')
+  export PERSIST_PAGE_ID=$(api POST /api/pages "{\"book_id\":$PERSIST_BOOK_ID,\"name\":\"Persist Page\",\"markdown\":\"# persist-marker-PERSIST\"}" | json '.id')
   printf 'persist attachment\n' > "$WORK/persist.txt"
   curl -s -o /dev/null -H "Authorization: Token $ADMIN_TOKEN" \
-    -F "uploaded_to=$PP" -F "name=persist.txt" -F "file=@$WORK/persist.txt;filename=persist.txt" \
+    -F "uploaded_to=$PERSIST_PAGE_ID" -F "name=persist.txt" -F "file=@$WORK/persist.txt;filename=persist.txt" \
     "$BASE_URL/api/attachments"
-  ATT_BASE=$(dbq "SELECT path FROM attachments WHERE name='persist.txt' ORDER BY id DESC LIMIT 1;" | awk -F/ '{print $NF}')
+  export PERSIST_ATT_BASE=$(dbq "SELECT path FROM attachments WHERE name='persist.txt' ORDER BY id DESC LIMIT 1;" | awk -F/ '{print $NF}')
 
+  # Restart the stack (no volume wipe).
   dc down >/dev/null 2>&1          # NOTE: no -v
   dc up -d >/dev/null 2>&1
   wait_for_db_healthy 180 || ko "db unhealthy after restart"
   wait_for_http /login 200 240 || ko "app did not return after restart"
-  wait_for_api 120 || ko "API not DB-ready after restart"   # nginx serves /login before MySQL reconnects
+  wait_for_api 120 || ko "API not DB-ready after restart"
 
-  if poll_contains 60 "persist-marker-PERSIST" GET "/api/pages/$PP"; then
-    ok "page content survived down/up"
+  # Run the persistence bats suite.
+  if [ -n "$BATS_BIN" ] && [ -x "$BATS_BIN" ]; then
+    if "$BATS_BIN" --print-output-on-failure "$SCRIPT_DIR/bats/10_persistence.bats"; then
+      ok "persistence suite: all checks passed"
+    else
+      ko "persistence suite: check 10_persistence.bats output"
+    fi
   else
-    ko "page content LOST across down/up"
-  fi
-  ATT_OK=""
-  ATT_DEADLINE=$((SECONDS + 60))
-  while [ "$SECONDS" -lt "$ATT_DEADLINE" ]; do
-    [ -n "$ATT_BASE" ] && [ -n "$(dc exec -T bookstack sh -lc "find /config -type f -name '$ATT_BASE' 2>/dev/null | head -1")" ] && { ATT_OK=1; break; }
-    sleep 2
-  done
-  if [ -n "$ATT_OK" ]; then
-    ok "attachment survived down/up on the persistent volume"
-  else
-    ko "attachment LOST across down/up"
+    # Fallback inline assertions.
+    if poll_contains 60 "persist-marker-PERSIST" GET "/api/pages/$PERSIST_PAGE_ID"; then
+      ok "page content survived down/up"
+    else
+      ko "page content LOST across down/up"
+    fi
+    ATT_OK=""
+    ATT_DEADLINE=$((SECONDS + 60))
+    while [ "$SECONDS" -lt "$ATT_DEADLINE" ]; do
+      [ -n "$PERSIST_ATT_BASE" ] && [ -n "$(dc exec -T bookstack sh -lc "find /config -type f -name '$PERSIST_ATT_BASE' 2>/dev/null | head -1")" ] && { ATT_OK=1; break; }
+      sleep 2
+    done
+    if [ -n "$ATT_OK" ]; then
+      ok "attachment survived down/up on the persistent volume"
+    else
+      ko "attachment LOST across down/up"
+    fi
   fi
 fi
 

@@ -193,7 +193,7 @@ func (c *Config) senderAllowed(email string) bool {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if len(c.AllowedSenders) > 0 {
 		for _, a := range c.AllowedSenders {
-			if a == email {
+			if strings.ToLower(a) == email {
 				return true
 			}
 		}

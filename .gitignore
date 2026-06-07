@@ -33,3 +33,7 @@ _user_data.rendered.sh
 # OS / editor
 .DS_Store
 *.swp
+
+# Python bytecode cache
+__pycache__/
+*.pyc
