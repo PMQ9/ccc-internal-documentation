@@ -90,7 +90,7 @@ mh_hdr() { curl -s "$MH_BASE/api/v2/messages" | jq -r ".items[0].Content.Headers
     --data-urlencode "details=repro steps" \
     "$C_BASE/contact/submit"
   rm -f "$jar"
-  assert_status 200 "$output" "valid submit should render the success page"
+  assert_status 303 "$output" "valid submit should PRG-redirect (303) to the thanks page (issue #43)"
 
   delivered=""
   for _ in $(seq 1 15); do
@@ -130,7 +130,7 @@ mh_hdr() { curl -s "$MH_BASE/api/v2/messages" | jq -r ".items[0].Content.Headers
   assert_equal "0" "$(mh_total)" "no mail should be sent for a rejected sender"
 }
 
-@test "T-020 honeypot is silently dropped (200), nothing sent" {
+@test "T-020 honeypot is silently dropped (303 decoy), nothing sent" {
   mh_clear
   jar="$(mktemp)"
   token="$(get_token "$jar")"
@@ -140,7 +140,7 @@ mh_hdr() { curl -s "$MH_BASE/api/v2/messages" | jq -r ".items[0].Content.Headers
     --data-urlencode "summary=spam" --data-urlencode "website=http://spam.example" \
     "$C_BASE/contact/submit"
   rm -f "$jar"
-  assert_status 200 "$output" "honeypot must return a silent 200"
+  assert_status 303 "$output" "honeypot must return the same silent 303 PRG decoy as a real send (issue #43)"
   sleep 2
   assert_equal "0" "$(mh_total)" "honeypot submission must not be sent"
 }
@@ -192,11 +192,24 @@ mh_hdr() { curl -s "$MH_BASE/api/v2/messages" | jq -r ".items[0].Content.Headers
     --data-urlencode "summary=ping @team" --data-urlencode "details=see #1" \
     "$C_BASE/contact/submit"
   rm -f "$jar"
-  assert_status 200 "$output" "a submission containing @ and # must still be accepted"
+  assert_status 303 "$output" "a submission containing @ and # must still be accepted (303 PRG)"
   delivered=""
   for _ in $(seq 1 15); do
     [ "$(mh_total)" = "1" ] && { delivered=1; break; }
     sleep 1
   done
   [ -n "$delivered" ] || flunk "expected the @mention submission to deliver one email"
+}
+
+@test "T-020 PRG: the thanks page renders the confirmation + path back (issue #43)" {
+  body="$(curl -s "$C_BASE/contact/thanks")"
+  assert_contains "$body" "Thanks" "thanks page must render a confirmation"
+  assert_contains "$body" "Back to the wiki" "thanks page must keep the path back"
+}
+
+@test "T-020 in-container -healthcheck probe exits 0 (issue #43)" {
+  # The distroless image has no shell, so the container HEALTHCHECK is the binary
+  # itself. Run the same probe end-to-end against the live server.
+  run dcc exec -T contact /contact -healthcheck
+  assert_equal 0 "$status" "the -healthcheck probe should exit 0 when the server is up"
 }

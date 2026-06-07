@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -9,7 +10,7 @@ import (
 // backstop against memory exhaustion if the key space is ever attacker-influenced
 // (e.g. spoofed source IPs in X-Forwarded-For). It sits far above any real client
 // diversity for an internal form, so a healthy service never reaches it; if it
-// does, the oldest-seen keys are evicted. (issue #41)
+// does, the oldest-seen keys are evicted in a batch. (issue #41)
 const maxTrackedKeys = 50_000
 
 // rateLimiter is a per-key sliding-window limiter (in-memory, single instance).
@@ -18,18 +19,19 @@ const maxTrackedKeys = 50_000
 //
 // Keys are evicted two ways so the map can't grow without bound: a lazy sweep
 // (at most once per window) drops keys whose entire window has elapsed, and a
-// hard maxTrackedKeys cap evicts the oldest-seen keys if the map still overflows.
+// hard maxKeys cap batch-evicts the oldest-seen keys if the map still overflows.
 // Reused for the per-IP, global circuit-breaker, and GitHub-daily limiters.
 type rateLimiter struct {
 	mu        sync.Mutex
 	limit     int
 	win       time.Duration
+	maxKeys   int // hard cap on distinct keys; injectable so the cap path is testable
 	hits      map[string][]time.Time
 	lastSweep time.Time
 }
 
 func newRateLimiter(limit int, win time.Duration) *rateLimiter {
-	return &rateLimiter{limit: limit, win: win, hits: make(map[string][]time.Time)}
+	return &rateLimiter{limit: limit, win: win, maxKeys: maxTrackedKeys, hits: make(map[string][]time.Time)}
 }
 
 // allow records an attempt for key at now and reports whether it is within the
@@ -59,12 +61,12 @@ func (rl *rateLimiter) allow(key string, now time.Time) bool {
 	}
 
 	// A brand-new key is about to be tracked: enforce the hard cap (sweep first,
-	// then evict oldest-seen while still over) so a flood of distinct keys can't
-	// OOM the process even between scheduled sweeps.
-	if _, seen := rl.hits[key]; !seen && len(rl.hits) >= maxTrackedKeys {
+	// then, if still over, batch-evict down to a low-water mark) so a flood of
+	// distinct keys can't OOM the process even between scheduled sweeps.
+	if _, seen := rl.hits[key]; !seen && len(rl.hits) >= rl.maxKeys {
 		rl.sweep(now)
-		for len(rl.hits) >= maxTrackedKeys {
-			rl.evictOldest()
+		if len(rl.hits) >= rl.maxKeys {
+			rl.evictBatch(rl.maxKeys - rl.maxKeys/10) // drop to ~90%, see evictBatch
 		}
 	}
 
@@ -86,20 +88,36 @@ func (rl *rateLimiter) sweep(now time.Time) {
 	rl.lastSweep = now
 }
 
-// evictOldest removes the key whose most-recent hit is the oldest — the one
-// least likely to still be rate-limited. Caller holds rl.mu, and only calls this
-// at the maxTrackedKeys backstop, which a healthy internal form never reaches.
-func (rl *rateLimiter) evictOldest() {
-	var oldestKey string
-	var oldest time.Time
-	first := true
-	for k, ts := range rl.hits {
-		last := ts[len(ts)-1]
-		if first || last.Before(oldest) {
-			oldest, oldestKey, first = last, k, false
-		}
+// evictBatch removes the oldest-seen keys (by most-recent hit) in a SINGLE pass
+// until the map is back to target, rather than one-at-a-time. The old per-key
+// scan was O(n) per evicted key, so a steady distinct-key flood at the cap pinned
+// the mutex at ~O(n) per request; one batched O(n log n) pass amortizes that to
+// ~O(1) per insertion (it runs once per ~maxKeys/10 new keys). Evicting the
+// oldest-seen first drops the keys least likely to still be rate-limited. Caller
+// holds rl.mu, and this runs only at the maxKeys backstop a healthy internal form
+// never reaches. (issue #43)
+func (rl *rateLimiter) evictBatch(target int) {
+	if target < 0 {
+		target = 0
 	}
-	if !first {
-		delete(rl.hits, oldestKey)
+	drop := len(rl.hits) - target
+	if drop <= 0 {
+		return
+	}
+	type keyAge struct {
+		key  string
+		last time.Time
+	}
+	ages := make([]keyAge, 0, len(rl.hits))
+	for k, ts := range rl.hits {
+		var last time.Time
+		if len(ts) > 0 {
+			last = ts[len(ts)-1]
+		}
+		ages = append(ages, keyAge{k, last})
+	}
+	sort.Slice(ages, func(i, j int) bool { return ages[i].last.Before(ages[j].last) })
+	for i := 0; i < drop; i++ {
+		delete(rl.hits, ages[i].key)
 	}
 }

@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -123,5 +125,50 @@ func TestAgentMailSend(t *testing.T) {
 func TestStripCRLF(t *testing.T) {
 	if got := stripCRLF("a\r\nb\nc\rd"); got != "abcd" {
 		t.Errorf("stripCRLF = %q", got)
+	}
+}
+
+// A black-holing relay (accepts the TCP connection but never sends the SMTP
+// greeting) must not hang the request goroutine: the connection deadline pinned
+// from the send context makes Send fail fast. Without it, smtp.NewClient blocks
+// reading the greeting until the server's WriteTimeout. (issue #43 — finding #1)
+func TestSMTPSendHonorsContextDeadline(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		time.Sleep(2 * time.Second) // hold the connection open, say nothing
+		_ = c.Close()
+	}()
+
+	host, portStr, _ := net.SplitHostPort(ln.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	m := &smtpMailer{host: host, port: port, encryption: "none"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		done <- m.Send(ctx, &Message{FromAddr: "f@x.test", To: "t@x.test", Subject: "s", Body: "b"})
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("Send should error against a black-holing relay")
+		}
+		if elapsed := time.Since(start); elapsed > 2*time.Second {
+			t.Errorf("Send took %v — deadline not honored (should fail ~300ms)", elapsed)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Send hung past the context deadline — connection deadline not set")
 	}
 }

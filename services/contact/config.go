@@ -32,8 +32,9 @@ type Config struct {
 	AllowedDomain  string   // required submitter domain, e.g. "vanderbilt.edu" ("" = any)
 	AllowedSenders []string // optional exact-address allowlist (overrides AllowedDomain)
 
-	// Mail transport: "smtp" (Brevo/Gmail/SES/Proton-Bridge — all just config) or
-	// "graph" (Microsoft 365 send-as, needs an app registration; kept for later).
+	// Mail transport: "agentmail" (REST via an agentmail.to inbox — recommended,
+	// sender-authenticated, no IT), "smtp" (Brevo/Gmail/SES/Proton-Bridge — the
+	// default), or "graph" (Microsoft 365 send-as, needs an app registration).
 	Transport string
 
 	// SMTP

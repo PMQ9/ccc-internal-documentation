@@ -29,9 +29,14 @@ type Message struct {
 	Headers  map[string]string // extra headers, e.g. X-CCC-Contact-Type
 }
 
-// Mailer sends a Message. Two implementations: smtpMailer (Brevo/Gmail/SES/
-// Proton-Bridge — anything speaking SMTP) and graphMailer (Microsoft 365
-// send-as). The choice is config, so swapping relays never touches calling code.
+// Mailer sends a Message. Three implementations, selected by MAIL_TRANSPORT:
+//   - agentMailer ("agentmail") — REST send via an agentmail.to inbox.
+//     Recommended: sender-authenticated (SPF/DKIM/DMARC), no IT, free tier.
+//   - smtpMailer ("smtp", the config default) — Brevo/Gmail/SES/Proton-Bridge,
+//     anything speaking SMTP.
+//   - graphMailer ("graph") — Microsoft 365 send-as (needs an app registration).
+//
+// The choice is config, so swapping relays never touches calling code.
 type Mailer interface {
 	Send(ctx context.Context, m *Message) error
 }
@@ -132,7 +137,10 @@ func (s *smtpMailer) Send(ctx context.Context, m *Message) error {
 	var conn net.Conn
 	var err error
 	if s.encryption == "tls" {
-		conn, err = tls.DialWithDialer(&d, "tcp", addr, tlsConf)
+		// Implicit TLS: dial through tls.Dialer so the handshake itself honors
+		// ctx (tls.DialWithDialer ignored it — a stalled handshake could hang
+		// past the send deadline).
+		conn, err = (&tls.Dialer{NetDialer: &d, Config: tlsConf}).DialContext(ctx, "tcp", addr)
 	} else {
 		conn, err = d.DialContext(ctx, "tcp", addr)
 	}
@@ -140,6 +148,14 @@ func (s *smtpMailer) Send(ctx context.Context, m *Message) error {
 		return fmt.Errorf("smtp dial %s: %w", addr, err)
 	}
 	defer conn.Close()
+
+	// net/smtp takes no context, so the whole AUTH/MAIL/RCPT/DATA conversation
+	// would otherwise run with no I/O deadline: a black-holing relay could stall
+	// the request goroutine until the server's WriteTimeout. Pin the connection
+	// to the send context's deadline so a stuck relay fails fast instead. (#1)
+	if dl, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(dl)
+	}
 
 	cl, err := smtp.NewClient(conn, s.host)
 	if err != nil {

@@ -81,6 +81,17 @@ func post(s *server, v url.Values, withCSRF bool, mods ...func(*http.Request)) *
 	return rec
 }
 
+// getThanks fetches the PRG target a successful submit redirects to (issue #43).
+func getThanks(s *server, mods ...func(*http.Request)) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, thanksPath, nil)
+	for _, m := range mods {
+		m(req)
+	}
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, req)
+	return rec
+}
+
 func TestFormGET(t *testing.T) {
 	s, _ := newTestServer(t, testConfig())
 	req := httptest.NewRequest(http.MethodGet, "/contact", nil)
@@ -153,8 +164,12 @@ func TestSubmitHappyPath(t *testing.T) {
 	s, fm := newTestServer(t, testConfig())
 	rec := post(s, validVals(), true)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	// PRG: a successful submit redirects so a refresh/Back can't re-POST. (issue #43)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 (PRG)\n%s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != thanksPath {
+		t.Errorf("Location = %q, want %q", loc, thanksPath)
 	}
 	if len(fm.sent) != 1 {
 		t.Fatalf("sent %d messages, want 1", len(fm.sent))
@@ -175,9 +190,9 @@ func TestSubmitHappyPath(t *testing.T) {
 	if m.Headers["X-CCC-Contact-Type"] != "bug" {
 		t.Errorf("X-CCC-Contact-Type = %q", m.Headers["X-CCC-Contact-Type"])
 	}
-	// The success page carries the same masthead + path back (newSuccessView wires it).
-	if body := rec.Body.String(); !strings.Contains(body, "Back to the wiki") {
-		t.Error("success page missing the back-to-wiki link")
+	// The thanks page (the PRG target) carries the same masthead + path back.
+	if body := getThanks(s).Body.String(); !strings.Contains(body, "Back to the wiki") {
+		t.Error("thanks page missing the back-to-wiki link")
 	}
 }
 
@@ -202,8 +217,8 @@ func TestSuccessPageDoesNotLeakIssueURL(t *testing.T) {
 	s, fm := newTestServer(t, cfg)
 
 	rec := post(s, validVals(), true)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 (PRG)\n%s", rec.Code, rec.Body.String())
 	}
 	if len(fm.sent) != 1 {
 		t.Fatalf("sent %d messages, want 1 (this must be the real success path, not the honeypot)", len(fm.sent))
@@ -211,12 +226,22 @@ func TestSuccessPageDoesNotLeakIssueURL(t *testing.T) {
 	if !filed {
 		t.Error("GitHub issue was not filed server-side — internal tracking must still happen")
 	}
-	body := rec.Body.String()
+	// The response the browser receives in the SAME request that filed the issue
+	// (the 303) must neither carry the issue URL nor redirect to it — the faithful
+	// analog of the pre-PRG inline-body check (issue #36).
+	if loc := rec.Header().Get("Location"); loc != thanksPath {
+		t.Errorf("Location = %q, want %q (must not redirect to the issue)", loc, thanksPath)
+	}
+	if strings.Contains(rec.Body.String(), issueURL) {
+		t.Error("the submit response leaked the internal tracking-issue URL")
+	}
+	// And the page the submitter actually lands on carries no issue reference.
+	body := getThanks(s).Body.String()
 	if strings.Contains(body, issueURL) {
-		t.Error("success page leaked the internal tracking-issue URL to the submitter")
+		t.Error("thanks page leaked the internal tracking-issue URL to the submitter")
 	}
 	if strings.Contains(strings.ToLower(body), "tracking issue") {
-		t.Error("success page still mentions a tracking issue")
+		t.Error("thanks page still mentions a tracking issue")
 	}
 }
 
@@ -268,11 +293,12 @@ func TestThemeCookieClass(t *testing.T) {
 func TestThemeCookieOnSuccessPage(t *testing.T) {
 	s, _ := newTestServer(t, testConfig())
 	rec := post(s, validVals(), true /*withCSRF*/, withThemeCookie("dark"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 (PRG)\n%s", rec.Code, rec.Body.String())
 	}
-	if body := rec.Body.String(); !strings.Contains(body, `<html lang="en" class="dark-mode">`) {
-		t.Error("success page did not render the dark-mode class from the cookie")
+	thanks := getThanks(s, withThemeCookie("dark"))
+	if body := thanks.Body.String(); !strings.Contains(body, `<html lang="en" class="dark-mode">`) {
+		t.Error("thanks page did not render the dark-mode class from the cookie")
 	}
 }
 
@@ -292,8 +318,13 @@ func TestSubmitHoneypot(t *testing.T) {
 	v := validVals()
 	v.Set("website", "http://spam.example")
 	rec := post(s, v, true)
-	if rec.Code != http.StatusOK {
-		t.Errorf("honeypot status = %d, want 200 (silent success)", rec.Code)
+	// The decoy must be indistinguishable from a real send: same 303 to the same
+	// thanks page (issue #43), but nothing is sent.
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("honeypot status = %d, want 303 (silent PRG decoy)", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != thanksPath {
+		t.Errorf("honeypot Location = %q, want %q (indistinguishable from a real send)", loc, thanksPath)
 	}
 	if len(fm.sent) != 0 {
 		t.Error("honeypot submission was actually sent")
@@ -346,11 +377,11 @@ func TestSubmitRateLimit(t *testing.T) {
 	cfg := testConfig()
 	cfg.RateLimitPerHour = 2
 	s, _ := newTestServer(t, cfg)
-	if rec := post(s, validVals(), true); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 1 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 1 = %d, want 303", rec.Code)
 	}
-	if rec := post(s, validVals(), true); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 2 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 2 = %d, want 303", rec.Code)
 	}
 	if rec := post(s, validVals(), true); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("attempt 3 = %d, want 429", rec.Code)
@@ -464,11 +495,11 @@ func TestRateLimitNotEvadableByForgedXFF(t *testing.T) {
 	forge := func(spoof string) func(*http.Request) {
 		return func(r *http.Request) { r.Header.Set("X-Forwarded-For", spoof+", 203.0.113.7") }
 	}
-	if rec := post(s, validVals(), true, forge("1.1.1.1")); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 1 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true, forge("1.1.1.1")); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 1 = %d, want 303", rec.Code)
 	}
-	if rec := post(s, validVals(), true, forge("2.2.2.2")); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 2 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true, forge("2.2.2.2")); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 2 = %d, want 303", rec.Code)
 	}
 	if rec := post(s, validVals(), true, forge("3.3.3.3")); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("attempt 3 (forged left, same real client) = %d, want 429", rec.Code)
@@ -485,11 +516,11 @@ func TestGlobalCircuitBreaker(t *testing.T) {
 	from := func(ip string) func(*http.Request) {
 		return func(r *http.Request) { r.RemoteAddr = ip + ":40000" }
 	}
-	if rec := post(s, validVals(), true, from("198.51.100.1")); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 1 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true, from("198.51.100.1")); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 1 = %d, want 303", rec.Code)
 	}
-	if rec := post(s, validVals(), true, from("198.51.100.2")); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 2 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true, from("198.51.100.2")); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 2 = %d, want 303", rec.Code)
 	}
 	if rec := post(s, validVals(), true, from("198.51.100.3")); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("attempt 3 (distinct IP, global cap) = %d, want 429", rec.Code)
@@ -515,11 +546,11 @@ func TestGitHubDailyCap(t *testing.T) {
 	cfg.GitHubDailyCap = 1
 	s, fm := newTestServer(t, cfg)
 
-	if rec := post(s, validVals(), true); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 1 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 1 = %d, want 303", rec.Code)
 	}
-	if rec := post(s, validVals(), true); rec.Code != http.StatusOK {
-		t.Fatalf("attempt 2 = %d, want 200", rec.Code)
+	if rec := post(s, validVals(), true); rec.Code != http.StatusSeeOther {
+		t.Fatalf("attempt 2 = %d, want 303", rec.Code)
 	}
 	if len(fm.sent) != 2 {
 		t.Errorf("emails sent = %d, want 2 (the daily cap must not block email)", len(fm.sent))
@@ -555,8 +586,8 @@ func TestUserAgentTruncatedInEmail(t *testing.T) {
 	s, fm := newTestServer(t, testConfig())
 	longUA := strings.Repeat("U", 5000)
 	rec := post(s, validVals(), true, func(r *http.Request) { r.Header.Set("User-Agent", longUA) })
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
 	}
 	if len(fm.sent) != 1 {
 		t.Fatalf("sent %d, want 1", len(fm.sent))
@@ -566,5 +597,93 @@ func TestUserAgentTruncatedInEmail(t *testing.T) {
 	}
 	if !strings.Contains(fm.sent[0].Body, "…") {
 		t.Error("expected a truncation ellipsis on the User-Agent")
+	}
+}
+
+// The PRG target renders a plain confirmation, branded with the path back, under
+// both the /contact-prefixed and bare aliases. (issue #43)
+func TestThanksPage(t *testing.T) {
+	s, _ := newTestServer(t, testConfig())
+	for _, path := range []string{"/contact/thanks", "/thanks"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		s.routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", path, rec.Code)
+		}
+		if body := rec.Body.String(); !strings.Contains(body, "Thanks") || !strings.Contains(body, "Back to the wiki") {
+			t.Errorf("GET %s missing the confirmation/back-to-wiki content", path)
+		}
+	}
+}
+
+// A cross-site POST (Origin host != ours) is rejected even with a valid CSRF
+// pair — defense-in-depth; a same-origin Origin still passes. (issue #43)
+func TestSubmitOriginMismatch(t *testing.T) {
+	s, fm := newTestServer(t, testConfig())
+	rec := post(s, validVals(), true, func(r *http.Request) { r.Header.Set("Origin", "http://evil.test") })
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("cross-site Origin status = %d, want 403", rec.Code)
+	}
+	if len(fm.sent) != 0 {
+		t.Error("cross-site submission was sent")
+	}
+
+	s2, fm2 := newTestServer(t, testConfig())
+	if rec := post(s2, validVals(), true, func(r *http.Request) { r.Header.Set("Origin", "http://"+r.Host) }); rec.Code != http.StatusSeeOther {
+		t.Errorf("same-origin status = %d, want 303", rec.Code)
+	}
+	if len(fm2.sent) != 1 {
+		t.Errorf("same-origin sent = %d, want 1", len(fm2.sent))
+	}
+}
+
+// Behind a proxy (TrustProxy) the CSRF cookie must be Secure, or the token rides
+// cleartext — fail readiness. Localhost dev (no proxy) is exempt. (issue #43)
+func TestReadyzRequiresSecureCookieBehindProxy(t *testing.T) {
+	ready := func(trustProxy, secure bool) int {
+		cfg := testConfig()
+		cfg.TrustProxy, cfg.CookieSecure = trustProxy, secure
+		s, _ := newTestServer(t, cfg)
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		rec := httptest.NewRecorder()
+		s.routes().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if c := ready(true, false); c != http.StatusServiceUnavailable {
+		t.Errorf("readyz (proxy, insecure cookie) = %d, want 503", c)
+	}
+	if c := ready(true, true); c != http.StatusOK {
+		t.Errorf("readyz (proxy, secure cookie) = %d, want 200", c)
+	}
+	if c := ready(false, false); c != http.StatusOK {
+		t.Errorf("readyz (local dev, no proxy) = %d, want 200", c)
+	}
+}
+
+// A 400 re-render must be navigable by assistive tech: an alert summary plus
+// aria-invalid + aria-describedby tying the offending field to its message.
+// (issue #43; WCAG 3.3.1 error identification, 2.4.3 focus order)
+func TestErrorRenderA11y(t *testing.T) {
+	s, _ := newTestServer(t, testConfig())
+	v := validVals()
+	v.Set("email", "jane@gmail.com") // off-domain → a field error keyed on "email"
+	rec := post(s, v, true)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`role="alert"`,
+		`id="error-summary"`,
+		`aria-invalid="true"`,
+		`aria-describedby="email-hint email-err"`,
+		`id="email-err"`,
+		`id="email-hint"`,
+		`href="#email"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("error re-render missing a11y marker %q", want)
+		}
 	}
 }

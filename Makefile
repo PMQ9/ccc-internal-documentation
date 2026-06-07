@@ -66,7 +66,7 @@ shellcheck: ## shellcheck all shell + the rendered user-data template
 	  deploy/local/verify.sh deploy/local/dev-up.sh deploy/local/deploy-remote.sh deploy/local/snapshot.sh deploy/local/apply-brand.sh \
 	  tests/lib/common.sh tests/integration/run.sh \
 	  tests/integration/helpers/load.bash tests/lib/render_user_data.sh \
-	  tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh _user_data.rendered.sh
+	  tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh tests/lib/check_theme_bridge.sh _user_data.rendered.sh
 
 .PHONY: compose-config
 compose-config: ## validate deploy/local/compose.yaml renders
@@ -94,9 +94,13 @@ pins: ## assert pins don't float + Makefile tool pins == CI pins (single source 
 user-data-contract: ## assert rendered user-data fetches secrets (bakes none)
 	./tests/lib/check_user_data_contract.sh
 
+.PHONY: theme-bridge
+theme-bridge: ## assert the cross-origin theme-bridge contract is identical in both copies
+	./tests/lib/check_theme_bridge.sh
+
 .PHONY: contact-test
-contact-test: ## go test the contact service (unit; no network, no deps, via pinned go image)
-	$(DKR) -w /work/services/contact $(GO_IMG) go test ./...
+contact-test: ## gofmt + vet + go test the contact service (unit; no network/deps, pinned go image)
+	$(DKR) -w /work/services/contact $(GO_IMG) sh -c 'test -z "$$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }; go vet ./... && go test ./...'
 
 # ---- deploy (developer action; touches a remote host, so NOT in `check`) ----
 .PHONY: deploy
@@ -109,7 +113,7 @@ apply-theme: ## re-apply the CCC brand (head + logo/favicon/color) to the runnin
 
 # ---- aggregates -------------------------------------------------------------
 .PHONY: check
-check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract contact-test ## all static/IaC gates
+check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract theme-bridge contact-test ## all static/IaC gates
 
 .PHONY: integration
 integration: ## integration suite (PR profile)

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	texttemplate "text/template"
 	"time"
@@ -33,6 +34,10 @@ const (
 	// maxUserAgentRunes bounds the attacker-controlled User-Agent before it lands
 	// verbatim in the notification email body. (issue #41)
 	maxUserAgentRunes = 400
+
+	// thanksPath is the GET target of the post-submit PRG redirect: a refresh or
+	// Back lands here (a plain confirmation) instead of re-POSTing. (issue #43)
+	thanksPath = "/contact/thanks"
 )
 
 // securityHeaders adds defense-in-depth response headers to every response.
@@ -125,6 +130,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /contact/readyz", s.handleReadyz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
+	mux.HandleFunc("GET /contact/thanks", s.handleThanks)
+	mux.HandleFunc("GET /thanks", s.handleThanks)
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	return securityHeaders(mux)
 }
@@ -143,6 +150,16 @@ func (s *server) handleReadyz(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "mail not configured", http.StatusServiceUnavailable)
 		return
 	}
+	// Behind a proxy (TrustProxy is the "we sit behind the ALB, TLS terminates
+	// upstream" signal) the CSRF cookie MUST be Secure — otherwise the token rides
+	// cleartext and a network adversary can pair cookie+body. Fail readiness rather
+	// than serve an insecure cookie where the connection should be HTTPS. Not
+	// enforced on localhost dev (TrustProxy false, plain HTTP), where a Secure
+	// cookie would simply never be sent back. (issue #43)
+	if s.cfg.TrustProxy && !s.cfg.CookieSecure {
+		http.Error(w, "insecure cookie: set CONTACT_SECURE_COOKIE=true behind a proxy", http.StatusServiceUnavailable)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("ready"))
 }
@@ -151,8 +168,40 @@ func (s *server) handleForm(w http.ResponseWriter, r *http.Request) {
 	s.renderForm(w, http.StatusOK, s.newFormView(w, r, map[string]string{}, map[string]string{}, ""))
 }
 
+// handleThanks renders the post-submit confirmation. It is the GET target of the
+// PRG redirect from a successful submit (and the honeypot decoy), so a refresh or
+// Back never re-POSTs — no duplicate email/issue. It holds no per-submission state
+// (none is needed); a direct GET just shows a generic thank-you. (issue #43)
+func (s *server) handleThanks(w http.ResponseWriter, r *http.Request) {
+	s.renderSuccess(w, s.newSuccessView(r))
+}
+
 func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
+
+	// One wide, structured event per request — the single per-submission record
+	// operators count for a RED-style view (grep '"msg":"contact request"' | jq
+	// .outcome | sort | uniq -c). Std-lib slog only; full Prometheus would break
+	// the no-dependencies rule. The GitHub side-channel keeps its own detail lines.
+	// (issue #43 — observability)
+	outcome := "sent"
+	github := "disabled"
+	var sendMS int64
+	var sendErr error
+	defer func() {
+		lvl := slog.LevelInfo
+		switch outcome {
+		case "rate_limited_ip", "rate_limited_global", "csrf_fail", "origin_mismatch", "invalid", "too_large", "unreadable":
+			lvl = slog.LevelWarn
+		case "send_failed", "mail_unconfigured":
+			lvl = slog.LevelError
+		}
+		attrs := []any{"outcome", outcome, "ip", ip, "send_ms", sendMS, "github", github}
+		if sendErr != nil {
+			attrs = append(attrs, "err", sendErr)
+		}
+		s.log.Log(context.Background(), lvl, "contact request", attrs...)
+	}()
 
 	// Cap the body before parsing so an oversized POST can't buffer megabytes in
 	// memory ahead of any validation (issue #41). MaxBytesReader makes ParseForm
@@ -161,11 +210,12 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			s.log.Warn("contact submission too large", "ip", ip, "limit", maxBodyBytes)
+			outcome = "too_large"
 			s.renderForm(w, http.StatusRequestEntityTooLarge,
 				s.newFormView(w, r, map[string]string{}, map[string]string{}, "That submission was too large. Please shorten it and try again."))
 			return
 		}
+		outcome = "unreadable"
 		s.renderForm(w, http.StatusBadRequest,
 			s.newFormView(w, r, map[string]string{}, map[string]string{}, "Could not read the form. Please try again."))
 		return
@@ -184,39 +234,45 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		"page": in.Page, "summary": in.Summary, "details": in.Details,
 	}
 
+	// Per-IP limiter caps SUBMIT ATTEMPTS (every parseable POST from this source),
+	// not just deliveries — so a single client hammering invalid/junk posts is
+	// still throttled. It is charged early, ahead of validation, for exactly that
+	// reason. The aggregate breaker (which protects mailbox volume) is charged
+	// later, only on would-be-sends — see below. (issue #43)
 	if !s.limiter.allow(ip, s.now()) {
-		s.log.Warn("contact rate limited (per-ip)", "ip", ip)
+		outcome = "rate_limited_ip"
 		s.renderForm(w, http.StatusTooManyRequests, s.newFormView(w, r, values, map[string]string{},
 			"Too many submissions from your connection. Please wait a few minutes and try again."))
 		return
 	}
 
-	// Aggregate circuit-breaker: even if no single IP is over its cap, a flood
-	// spread across many IPs is throttled before it can reach the mailbox. Trips
-	// fail-safe (protects the inbox) and auto-resets as the sliding window clears.
-	if !s.globalLimiter.allow("global", s.now()) {
-		s.log.Warn("contact rate limited (global circuit-breaker)", "ip", ip)
-		s.renderForm(w, http.StatusTooManyRequests, s.newFormView(w, r, values, map[string]string{},
-			"We're receiving an unusually high number of submissions right now. Please try again shortly."))
-		return
-	}
-
-	if !s.verifyCSRF(r) {
+	// Reject an obvious cross-site POST before more work — defense-in-depth
+	// alongside the double-submit CSRF token (see sameOrigin). (issue #43)
+	if !s.sameOrigin(r) {
+		outcome = "origin_mismatch"
 		s.renderForm(w, http.StatusForbidden, s.newFormView(w, r, values, map[string]string{},
 			"Your session expired. Please review and submit again."))
 		return
 	}
 
-	// Honeypot: a hidden field real users never fill. Pretend success so bots
-	// don't learn they were caught; send nothing.
+	if !s.verifyCSRF(r) {
+		outcome = "csrf_fail"
+		s.renderForm(w, http.StatusForbidden, s.newFormView(w, r, values, map[string]string{},
+			"Your session expired. Please review and submit again."))
+		return
+	}
+
+	// Honeypot: a hidden field real users never fill. Redirect to the same thanks
+	// page a real send uses (PRG), so a bot can't tell it was caught; send nothing.
 	if strings.TrimSpace(r.PostFormValue(honeypotField)) != "" {
-		s.log.Warn("contact honeypot tripped", "ip", ip)
-		s.renderSuccess(w, s.newSuccessView(r))
+		outcome = "honeypot"
+		http.Redirect(w, r, thanksPath, http.StatusSeeOther)
 		return
 	}
 
 	sub, ferrs := newSubmission(in, s.cfg, s.now())
 	if len(ferrs) > 0 {
+		outcome = "invalid"
 		errs := make(map[string]string, len(ferrs))
 		for _, e := range ferrs {
 			errs[e.Field] = e.Message
@@ -226,46 +282,68 @@ func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !s.cfg.mailConfigured() {
-		s.log.Error("contact submit but mail not configured")
+		outcome = "mail_unconfigured"
 		s.renderForm(w, http.StatusServiceUnavailable, s.newFormView(w, r, values, map[string]string{},
 			"Email delivery isn't set up yet. Please email "+s.cfg.Recipient+" directly for now."))
+		return
+	}
+
+	// Aggregate circuit-breaker counts WOULD-BE-SENDS: charged here, only after a
+	// submission has cleared CSRF + honeypot + validation, so a flood of junk that
+	// never reaches the mailbox can't trip it and fail-safe-429 legitimate users.
+	// Trips fail-safe (protects the inbox) and auto-resets as the window clears.
+	// (issue #43 — was previously charged on raw attempts.)
+	if !s.globalLimiter.allow("global", s.now()) {
+		outcome = "rate_limited_global"
+		s.renderForm(w, http.StatusTooManyRequests, s.newFormView(w, r, values, map[string]string{},
+			"We're receiving an unusually high number of submissions right now. Please try again shortly."))
 		return
 	}
 
 	sub.SourceIP = ip // already a validated IP or RemoteAddr host (see clientIP)
 	sub.UserAgent = truncateRunes(r.UserAgent(), maxUserAgentRunes)
 
-	// Email is the gating channel — its failure fails the submission.
-	sendCtx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	// Decouple the send from the request context: a client disconnect or refresh
+	// must NOT cancel an in-flight send the relay may already have accepted — that
+	// turns one delivered email into a perceived failure and a retry (duplicate).
+	// Email is the gating channel — its failure fails the submission. Delivery is
+	// at-least-once; see the runbook. (issue #43)
+	sendCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
-	if err := s.mailer.Send(sendCtx, s.buildMessage(sub)); err != nil {
-		s.log.Error("contact email send failed", "err", err, "ip", ip, "kind", string(sub.Kind))
+	t0 := time.Now()
+	sendErr = s.mailer.Send(sendCtx, s.buildMessage(sub))
+	sendMS = time.Since(t0).Milliseconds()
+	if sendErr != nil {
+		outcome = "send_failed"
 		s.renderForm(w, http.StatusBadGateway, s.newFormView(w, r, values, map[string]string{},
 			"Sorry — we couldn't send your message right now. Please try again in a few minutes."))
 		return
 	}
-	s.log.Info("contact email sent", "kind", string(sub.Kind), "from", sub.Email)
 
 	// GitHub issue is best-effort: a GitHub outage must never block feedback.
 	// Filed for internal tracking only — its URL is never surfaced to the
-	// submitter (issue #36), so we don't thread it into the success view. A
-	// tighter daily cap protects the tracker from a flood that the hourly caps
-	// would still let through over a day; the email above is unaffected (issue #41).
+	// submitter (issue #36). A tighter daily cap protects the tracker from a flood
+	// the hourly caps would still let through over a day; email is unaffected.
 	if s.cfg.githubConfigured() {
 		if !s.ghLimiter.allow("github", s.now()) {
+			github = "capped"
 			s.log.Warn("contact github daily cap reached; issue not filed (email still sent)", "ip", ip)
 		} else {
-			ghCtx, ghCancel := context.WithTimeout(r.Context(), 10*time.Second)
+			ghCtx, ghCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer ghCancel()
 			if u, err := s.gh.CreateIssue(ghCtx, s.buildIssue(sub)); err != nil {
+				github = "failed"
 				s.log.Error("contact github issue failed (non-fatal)", "err", err)
 			} else {
+				github = "filed"
 				s.log.Info("contact github issue filed", "url", u)
 			}
 		}
 	}
 
-	s.renderSuccess(w, s.newSuccessView(r))
+	// PRG: redirect to a GET so a refresh/Back doesn't re-POST (no duplicate
+	// email/issue). The thanks page reads the theme cookie + brand from the GET.
+	http.Redirect(w, r, thanksPath, http.StatusSeeOther)
 }
 
 // ---- CSRF (stateless double-submit cookie) --------------------------------
@@ -298,6 +376,26 @@ func (s *server) verifyCSRF(r *http.Request) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(c.Value), []byte(posted)) == 1
+}
+
+// sameOrigin is a defense-in-depth cross-site check: when the browser tells us
+// where the POST came from (Origin, else Referer), a host that doesn't match
+// ours is a forgery and we reject it. Absent headers fall through — the
+// double-submit CSRF token stays the primary gate, so this never blocks a
+// same-origin submit from a client that omits the header. (issue #43)
+func (s *server) sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = r.Header.Get("Referer")
+	}
+	if origin == "" {
+		return true // no signal — rely on the CSRF token
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
 }
 
 // clientIP resolves the submitter's IP for rate-limiting and audit. Behind a
@@ -380,9 +478,10 @@ func (s *server) renderForm(w http.ResponseWriter, status int, v formView) {
 	s.renderHTML(w, status, "form.html", v)
 }
 
-// newSuccessView builds the success view with the brand fields filled in. Both
-// success paths (honeypot decoy + real send) go through here so neither can ship
-// the masthead without the "home"/"back to the wiki" links.
+// newSuccessView builds the success view with the brand fields filled in. The
+// single thanks page (the PRG target both the honeypot decoy and a real send
+// redirect to) renders through here, so it can't ship the masthead without the
+// "home"/"back to the wiki" links.
 func (s *server) newSuccessView(r *http.Request) successView {
 	return successView{
 		WikiName:   s.cfg.WikiName,

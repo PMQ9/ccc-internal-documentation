@@ -42,9 +42,9 @@ third-party dependencies, so the image is tiny and the CVE surface minimal.
 | `CONTACT_INTAKE_GITHUB_TOKEN` | _(empty = off)_ | fine-grained PAT, `issues:write` only |
 | `CONTACT_GITHUB_REPO` | — | `owner/repo` |
 | `CONTACT_GITHUB_API_BASE` | `https://api.github.com` | overridden in tests |
-| `CONTACT_RATE_LIMIT_PER_HOUR` | `20` | per source IP |
+| `CONTACT_RATE_LIMIT_PER_HOUR` | `20` | per source IP — submit attempts (every parseable POST, valid or not) |
 | `CONTACT_TRUST_PROXY` | `false` | `true` behind the ALB/a proxy (honor `X-Forwarded-For`) |
-| `CONTACT_SECURE_COOKIE` | `false` | `true` under HTTPS (sets the CSRF cookie `Secure`) |
+| `CONTACT_SECURE_COOKIE` | `false` | `true` under HTTPS (sets the CSRF cookie `Secure`); required when `CONTACT_TRUST_PROXY=true` (else `/readyz` fails) |
 
 Mail/GitHub config is checked lazily: the service starts even when unconfigured
 (serving the form, returning 503 on submit), so it never crash-loops the compose

@@ -125,6 +125,14 @@ services:
     ports:
       - "${CONTACT_BIND:-8081}:8080"
     restart: unless-stopped
+    # The image is distroless (no shell), so the liveness probe is the binary
+    # itself: `contact -healthcheck` GETs the local /healthz and exits 0/1. (#43)
+    healthcheck:
+      test: ["CMD", "/contact", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   db_data:
