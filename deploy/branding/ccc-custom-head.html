@@ -59,13 +59,16 @@
     --ccc-callout-ink:    var(--ccc-black);          /* callout text on a tint   */
 
     /* ---- Tier 3: map the semantic tokens onto BookStack's OWN variables (names
-       from resources/sass/_vars.scss). BookStack does NOT re-derive these under
-       .dark-mode (verified on v26.05), so what we set here ships in BOTH modes
-       unless a token re-points it in the dark block. --color-primary is the one
-       value kept as raw Oak, NOT a mode token: BookStack uses it as a surface
-       BACKGROUND with a #FFF label (buttons, header, back-to-top), where white on
-       Oak is 4.65:1 (AA) but white on a lighter gold is 2.1:1 (fail). So it must
-       stay dark in both modes; only link/accent TEXT is the mode-varying part. */
+       from resources/sass/_vars.scss). The DB primary (app-color) is set to CCC
+       BLACK, not Oak: BookStack paints the header (.primary-background) with
+       --color-primary AND strips this whole head on /settings/{category} pages (an
+       upstream lockout guard), so the header is the right color there ONLY if the
+       DB value is already black. Here — on every page where this head DOES load —
+       we re-point --color-primary to Oak so it serves as the button/accent SURFACE
+       with a #FFF label (white on Oak 4.65:1 AA; white on a lighter gold is 2.1:1,
+       which is why it's Oak, never brighter). The header is then forced back to
+       black by section 2. We re-point in BOTH modes (see the dark block) because
+       app-color-dark is black too. (Issue #40.) */
     --color-primary:       var(--ccc-gold-oak);
     --color-primary-light: var(--ccc-selected-tint);
     --color-link:          var(--ccc-link);
@@ -73,15 +76,19 @@
 
   /* ----------------------------------------------------------------------
      1b. Dark mode — re-point ONLY the mode-varying tokens, in one place.
-     BookStack flips its own text to light under html.dark-mode and owns the dark
-     page surface (#111). So we hand the chrome back to it (transparent, letting
-     #111 + BookStack's light text show through) and move link/accent TEXT to the
-     lighter golds that clear AA on #111: Flat Gold #CFAE70 = 8.9:1, Highlight
-     #ECB748 = 10.3:1. --color-primary is deliberately absent (see Tier 3) so its
-     white button label keeps 4.65:1. The CCC black header (section 2) is
-     intentionally dark in both modes, so it needs nothing here.
+     BookStack flips its own text to light under .dark-mode and owns the dark page
+     surface (#111). So we hand the chrome back to it (transparent, letting #111 +
+     BookStack's light text show through) and move link/accent TEXT to the lighter
+     golds that clear AA on #111: Flat Gold #CFAE70 = 8.9:1, Highlight #ECB748 =
+     10.3:1. We also re-point --color-primary back to Oak here: BookStack injects a
+     dark primary (= the black app-color-dark) via its own `:root.dark-mode` rule,
+     so we must MATCH that specificity — hence `:root.dark-mode`, not the weaker
+     `html.dark-mode` — and land later in the head to win, keeping the Oak button
+     surface (white label 4.65:1). The black header (section 2) is dark in both
+     modes regardless. (Issue #40.)
      ---------------------------------------------------------------------- */
-  html.dark-mode {
+  :root.dark-mode {
+    --color-primary:      var(--ccc-gold-oak);
     --ccc-chrome-surface: transparent;
     --ccc-link:           var(--ccc-gold-flat);
     --ccc-link-hover:     var(--ccc-highlight);
@@ -95,8 +102,11 @@
   /* ----------------------------------------------------------------------
      2. Header — the Vanderbilt-signature black bar with a thin gold rule.
      Higher contrast (white on black = 16.9:1) than a colored bar, and
-     unmistakably Vanderbilt. .primary-background is the class BookStack puts
-     on the header; we override it to ink + a gold bottom accent.
+     unmistakably Vanderbilt. .primary-background is the class BookStack puts on
+     the header; since Tier 3 re-points --color-primary to Oak (for buttons), we
+     override the header itself back to ink + a gold bottom accent. The DB
+     app-color is ALSO black, so the /settings/{category} pages that strip this
+     head still render a black bar there — just without the gold rule. (Issue #40.)
      ---------------------------------------------------------------------- */
   header .primary-background,
   header.primary-background,
@@ -297,10 +307,14 @@
 
      What it does:
        (2) Default theme follows the OS (prefers-color-scheme). An explicit
-           user toggle wins and is remembered per-device in localStorage.
-           Theme is resolved CLIENT-SIDE so the OS default applies for guests
-           and brand-new users too; BookStack's server-side dark-mode pref is
-           intentionally not used for display (it can't see the OS).
+           user toggle wins and is remembered per-device, written to BOTH a
+           host-scoped COOKIE and localStorage (read order: cookie -> localStorage
+           -> OS). The cookie is what bridges the choice to the cross-port contact
+           page (cookies are scoped by host, not port; same origin in prod), which
+           localStorage cannot do. Theme is resolved CLIENT-SIDE so the OS default
+           applies for guests and brand-new users too; BookStack's server-side
+           dark-mode pref is intentionally not used for display (it can't see the
+           OS). (Cookie bridge: issue #39.)
        (1) Every dark/light toggle (BookStack's own + the injected login one)
            is wired to that one source of truth and reflects the DISPLAYED
            state, so there's no stale "Dark Mode" label on an already-dark page.
@@ -311,7 +325,7 @@
     "use strict";
 
     var html = document.documentElement;
-    var KEY = "ccc-color-scheme";            // "dark" | "light" | absent => follow OS
+    var KEY = "ccc-color-scheme";            // "dark" | "light" | absent => follow OS (both stores)
     var mq = window.matchMedia("(prefers-color-scheme: dark)");
     var serverDark = html.classList.contains("dark-mode");  // capture before we override
 
@@ -331,9 +345,36 @@
        the server state); default the unseen one to English (deployment locale). */
     var LABEL = { toDark: "Dark Mode", toLight: "Light Mode" };
 
-    function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
-    function persist(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
-    function resolveDark() { var s = stored(); return s ? s === "dark" : mq.matches; }
+    /* Theme lives in TWO mirrored stores. The COOKIE is host-scoped (sent to every
+       port on this host, and same-origin in prod), so it carries the choice to the
+       cross-port contact page — localStorage can't (it's per-origin). It is NOT
+       HttpOnly on purpose: this client JS owns it and the value (dark/light) is
+       non-sensitive. localStorage is the same-origin mirror. Writing sets BOTH so
+       they can't drift; reading prefers the cookie. (Issue #39.) */
+    function readCookie() {
+      try {
+        var m = document.cookie.match(/(?:^|;\s*)ccc-color-scheme=(dark|light)(?:;|$)/);
+        return m ? m[1] : null;
+      } catch (e) { return null; }
+    }
+    function writeCookie(v) {
+      try {
+        var secure = location.protocol === "https:" ? "; Secure" : "";
+        document.cookie = KEY + "=" + v + "; path=/; max-age=31536000; SameSite=Lax" + secure;
+      } catch (e) {}
+    }
+    function localPref() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+    function choice() {                      // cookie -> localStorage -> null (=> follow OS)
+      var c = readCookie();
+      if (c) return c;
+      var l = localPref();
+      return (l === "dark" || l === "light") ? l : null;
+    }
+    function persist(v) {                    // write BOTH mirrors so they never drift
+      writeCookie(v);
+      try { localStorage.setItem(KEY, v); } catch (e) {}
+    }
+    function resolveDark() { var c = choice(); return c ? c === "dark" : mq.matches; }
     function isDark() { return html.classList.contains("dark-mode"); }
 
     function apply(dark) {
@@ -349,8 +390,15 @@
     /* (2) Apply ASAP, in <head>, before the body paints — avoids a flash. */
     apply(resolveDark());
 
+    /* (2) Converge the two stores so this origin and the cross-port contact page
+       agree: a pre-cookie localStorage choice backfills the cookie, and a cookie
+       set on the contact page syncs back into this origin's localStorage. Having
+       no choice writes nothing — absence is precisely what "follow the OS" means. */
+    var current = choice();
+    if (current) persist(current);
+
     /* (2) Track OS changes while the user has made no explicit choice. */
-    function onSystemChange() { if (!stored()) { apply(mq.matches); refreshToggles(); } }
+    function onSystemChange() { if (!choice()) { apply(mq.matches); refreshToggles(); } }
     if (mq.addEventListener) mq.addEventListener("change", onSystemChange);
     else if (mq.addListener) mq.addListener(onSystemChange);  // older Safari
 
@@ -438,6 +486,46 @@
     function init() { adoptBookstackToggles(); enhanceLogin(); refreshToggles(); }
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
     else init();
+  })();
+</script>
+
+<script id="ccc-contact-link">
+  /* ----------------------------------------------------------------------
+     Inject a "Contact" link into the BookStack header. The URL is
+     substituted at deploy time by apply-brand.sh (config-as-code, from
+     CONTACT_URL). If it is left as the placeholder or empty — e.g. this head was
+     pasted by hand, or the contact service isn't wired — no link is added.
+     Network-free and dependency-free, like the rest of this file. (Issue #15.)
+     ---------------------------------------------------------------------- */
+  (function () {
+    "use strict";
+    var url = "__CCC_CONTACT_URL__";
+    if (!url || url.indexOf("__CCC_") === 0) return; // unsubstituted/unset -> skip
+
+    function inject() {
+      if (document.querySelector(".ccc-contact-link")) return; // idempotent
+      // BookStack groups its top-bar links in header .header-links .links; fall
+      // back outward if a future version restructures the header.
+      var host = document.querySelector("header .header-links .links")
+        || document.querySelector("header .header-links")
+        || document.querySelector("header nav")
+        || document.querySelector("header");
+      if (!host) return;
+      var a = document.createElement("a");
+      a.className = "ccc-contact-link";
+      a.href = url;
+      a.textContent = "Contact";
+      // Light inline styling so it reads as a header link even if it lands
+      // outside the styled link list; inherits the header's white-on-black.
+      a.style.color = "#fff";
+      a.style.display = "inline-flex";
+      a.style.alignItems = "center";
+      a.style.padding = "0 12px";
+      a.style.whiteSpace = "nowrap";
+      host.appendChild(a);
+    }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", inject);
+    else inject();
   })();
 </script>
 

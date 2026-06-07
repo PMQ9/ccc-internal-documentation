@@ -79,7 +79,7 @@ jobs:
             --shell=bash --severity=warning \
             deploy/local/verify.sh deploy/local/dev-up.sh deploy/local/deploy-remote.sh deploy/local/snapshot.sh \
             tests/lib/common.sh tests/lib/render_user_data.sh \
-            tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh \
+            tests/lib/check_pins.sh tests/lib/check_user_data_contract.sh tests/lib/check_theme_bridge.sh \
             tests/integration/run.sh tests/integration/helpers/load.bash user_data.rendered.sh
       - name: docker compose config validates
         run: |
@@ -93,6 +93,8 @@ jobs:
         run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.12 -color
       - name: pins don't float + Makefile tool pins match CI (single source of truth)
         run: ./tests/lib/check_pins.sh
+      - name: theme-bridge contract (wiki head == contact layout)
+        run: ./tests/lib/check_theme_bridge.sh
 
   secrets:
     name: secrets · gitleaks
@@ -120,5 +122,16 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: contact service checks (gofmt, vet, race tests)
+        # Mirrors `make contact-test` (gofmt + vet + test on the pinned GO_IMG) and
+        # adds the race detector — CI installs the C toolchain the alpine image lacks.
+        # The integration suite also builds the image (08_contact.bats), so a compile
+        # error fails here first.
+        run: |
+          docker run --rm -v "$PWD":/work -w /work/services/contact golang:1.23-alpine sh -c '
+            test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
+            go vet ./...
+            apk add --no-cache gcc musl-dev >/dev/null
+            CGO_ENABLED=1 go test -race ./...'
       - name: run integration suite
         run: tests/integration/run.sh --profile pr

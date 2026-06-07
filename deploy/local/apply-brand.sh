@@ -6,7 +6,9 @@
 #   app-custom-head        <- deploy/branding/ccc-custom-head.html      (CSS/JS theme + 4 UX features)
 #   app-logo               <- deploy/branding/assets/ccc-logo-reversed.svg  (staged into the volume)
 #   app-icon (+ 180/128/64/32) <- deploy/branding/assets/ccc-favicon.svg
-#   app-color (+ tints)    <- the CCC Oak palette (keep in sync with --ccc-gold-oak in the head file)
+#   app-color (+ tints)    <- CCC black #1C1C1C (the header bar). BookStack paints the header with
+#                             --color-primary AND strips our custom head on /settings/{category}
+#                             pages, so the header is black there only if the DB primary is (issue #40)
 #   app-name               <- APP_NAME from the environment, so the compose .env stays the source
 # It writes (and busts the cache) ONLY when something differs, so it is safe on every bring-up. The
 # repo is the source of truth: a brand edit made in the BookStack UI is reverted on the next run.
@@ -30,17 +32,34 @@ for f in "$HEAD_FILE" "$LOGO_FILE" "$FAVICON_FILE"; do
   fi
 done
 
+# Resolve the contact-form URL (config-as-code): an env override wins, else read
+# it from the compose .env, else empty. The head carries a __CCC_CONTACT_URL__
+# placeholder we substitute so the "Contact" header link points at the
+# live service (and is omitted entirely when the URL is unset).
+CONTACT_URL="${CONTACT_URL:-}"
+if [ -z "$CONTACT_URL" ] && [ -f .env ]; then
+  CONTACT_URL="$(grep -E '^CONTACT_URL=' .env 2> /dev/null | head -1 | cut -d= -f2- || true)"
+fi
+
 # 1. Stage files INTO the container: the head to a transient per-run path ($$ avoids a shared-file
 #    race), the logo/favicon into the persistent uploads volume (they are served as static files, and
 #    placing them here bypasses the UI's SVG-upload block). -T so exec doesn't eat our stdin.
 stage="/tmp/ccc-head.$$.html"
-cleanup() { docker compose exec -T "$SVC" rm -f "$stage" > /dev/null 2>&1 || true; }
+head_rendered="$(mktemp)"
+cleanup() {
+  docker compose exec -T "$SVC" rm -f "$stage" > /dev/null 2>&1 || true
+  rm -f "$head_rendered" 2> /dev/null || true
+}
 trap cleanup EXIT
+
+# Render a local copy of the head with the contact URL substituted, then stage THAT.
+url_repl="$(printf '%s' "$CONTACT_URL" | sed -e 's/[&|\\]/\\&/g')"
+sed "s|__CCC_CONTACT_URL__|${url_repl}|g" "$HEAD_FILE" > "$head_rendered"
 
 stage_into() { docker compose exec -T "$SVC" sh -c "cat > '$2'" < "$1"; } # <local-file> <container-path>
 
 if ! docker compose exec -T "$SVC" sh -c "mkdir -p '$IMG_DIR'" \
-  || ! stage_into "$HEAD_FILE" "$stage" \
+  || ! stage_into "$head_rendered" "$stage" \
   || ! stage_into "$LOGO_FILE" "$IMG_DIR/ccc-logo.svg" \
   || ! stage_into "$FAVICON_FILE" "$IMG_DIR/ccc-favicon.svg"; then
   echo "!! apply-brand: could not copy brand files into the '$SVC' container (is the stack up?)" >&2
@@ -67,9 +86,14 @@ if ($head === false) {
         "app-icon-128"         => "/uploads/images/system/ccc-favicon.svg",
         "app-icon-64"          => "/uploads/images/system/ccc-favicon.svg",
         "app-icon-32"          => "/uploads/images/system/ccc-favicon.svg",
-        "app-color"            => "#946E24",
+        // --color-primary = CCC black: BookStack paints the header (.primary-background) with it, and
+        // strips our custom head on /settings/{category} pages (an upstream lockout guard), so the
+        // header is black THERE only if the DB primary is. The head re-points --color-primary back to
+        // Oak as the white-label button/accent surface on every other page (issue #40). Do NOT revert
+        // to Oak. The *-light tints stay the Oak accent tint (subtle selected/hover fills).
+        "app-color"            => "#1C1C1C",
         "app-color-light"      => "rgba(148,110,36,0.15)",
-        "app-color-dark"       => "#946E24",
+        "app-color-dark"       => "#1C1C1C",
         "app-color-light-dark" => "rgba(148,110,36,0.15)",
     ];
     $name = (string) config("app.name");

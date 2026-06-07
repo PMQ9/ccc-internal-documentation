@@ -18,6 +18,8 @@ TFPLAN="$ROOT/.github/workflows/terraform-plan.yml"
 RENDER="$ROOT/tests/lib/render_user_data.sh"
 VARS="$ROOT/terraform/variables.tf"
 TFTPL="$ROOT/terraform/user-data.sh.tftpl"
+DOCKERFILE="$ROOT/services/contact/Dockerfile"
+GOMOD="$ROOT/services/contact/go.mod"
 
 fail=0
 note() { echo "  ok: $1"; }
@@ -30,8 +32,8 @@ echo "pin check:"
 
 # 1. No floating ':latest' in committed prod config (comment lines excluded; the documented
 #    appkey-gen command in a comment legitimately uses :latest).
-m="$(grep -hE ':latest' "$ROOT/deploy/local/.env.example" "$VARS" | grep -vE '^[[:space:]]*#' || true)"
-if [ -n "$m" ]; then bad "floating :latest in committed config: $m"; else note "no :latest in .env.example/variables.tf"; fi
+m="$(grep -hE ':latest' "$ROOT/deploy/local/.env.example" "$VARS" "$ROOT/services/contact/Dockerfile" | grep -vE '^[[:space:]]*#' || true)"
+if [ -n "$m" ]; then bad "floating :latest in committed config: $m"; else note "no :latest in .env.example/variables.tf/contact Dockerfile"; fi
 
 # 2. No floating 'releases/latest' in the EC2 bootstrap — pin docker_compose_version instead.
 #    Comment lines excluded (the rationale comment legitimately names the pattern it forbids).
@@ -55,6 +57,21 @@ have actionlint "$(mk_img ACTIONLINT_IMG)" "$CI"
 have gitleaks "$(mk_img GITLEAKS_IMG)" "$CI"
 have lychee "$(mk_img LYCHEE_IMG)" "$CI"
 have lychee "$(mk_img LYCHEE_IMG)" "$WEEKLY"
+
+# go toolchain image: canonical in the Makefile, mirrored in CI's contact step and
+# the service Dockerfile build stage; the go.mod `go` directive must name the same
+# minor. All four agreeing is the exact drift this gate exists to catch. (issue #43)
+go_img="$(mk_img GO_IMG)" # e.g. golang:1.23-alpine
+have go "$go_img" "$CI"
+have go "$go_img" "$DOCKERFILE"
+go_ver="${go_img#golang:}"
+go_ver="${go_ver%-*}" # golang:1.23-alpine -> 1.23
+go_re="${go_ver//./\\.}"
+if grep -qE "^go[[:space:]]+${go_re}([.[:space:]]|$)" "$GOMOD"; then
+  note "go.mod go directive ($go_ver) matches GO_IMG"
+else
+  bad "go.mod go directive != GO_IMG ($go_ver)"
+fi
 
 # terraform + tflint install via setup-* actions with a BARE version token (not image:tag), so
 # compare the version, not the whole image string. (terraform is triplicated: Makefile, ci, tf-plan.)

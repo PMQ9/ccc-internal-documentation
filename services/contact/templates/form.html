@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en"{{if .ThemeClass}} class="{{.ThemeClass}}"{{end}}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Contact — {{.WikiName}}</title>
+  <style>
+    /* Self-contained + network-free (same VPN-only constraint as the wiki brand).
+       The CCC palette + light/dark tokens live once in the shared "brand-head"
+       template below (issue #39); these rules only consume them via var(). */
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--chrome); color: var(--ink);
+           font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    /* Masthead (black bar + gold rule + logo) is the shared "masthead" template. */
+    main { max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    .card h1 { margin: 0 0 4px; font: 600 24px/1.25 Georgia, "Times New Roman", "Source Serif Pro", serif; }
+    p.lede { color: var(--muted); margin-top: 0; }
+    label { display: block; font-weight: 600; margin: 16px 0 4px; }
+    .req { color: var(--oak); }
+    input, select, textarea {
+      width: 100%; padding: 10px; font: inherit; color: var(--ink);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    textarea { min-height: 140px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { outline: 3px solid var(--oak); outline-offset: 1px; }
+    .hint { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+    .field-err { color: var(--err); font-size: 14px; margin: 4px 0 0; }
+    .banner { border-radius: 6px; padding: 12px 14px; margin-bottom: 16px; }
+    .banner.error { background: rgba(179,38,30,0.12); border: 1px solid var(--err); }
+    .banner.warn  { background: rgba(148,110,36,0.12); border: 1px solid var(--oak); }
+    .banner.error a { color: var(--err); font-weight: 600; }
+    .banner ul { margin: 8px 0 0; padding-left: 20px; }
+    .banner[tabindex]:focus-visible { outline: 3px solid var(--oak); outline-offset: 2px; }
+    [aria-invalid="true"] { border-color: var(--err); }
+    /* Scoped to the form card so it never bleeds onto the masthead theme toggle. */
+    .card button { margin-top: 20px; background: var(--oak); color: #fff; border: 0; border-radius: 6px;
+             padding: 12px 20px; font: 600 16px inherit; cursor: pointer; }
+    .card button:hover { background: #7d5d1e; }
+    .card button:disabled { opacity: .5; cursor: not-allowed; }
+    /* Honeypot: off-screen, untabbable, hidden from AT. Bots fill it; humans don't. */
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  </style>
+  {{template "brand-head" .}}
+</head>
+<body>
+  {{template "masthead" .}}
+  <main>
+    <div class="card">
+      <h1>Contact</h1>
+      <p class="lede">Send a request, bug report, or feedback to the CCC admin team. We read every message.</p>
+
+      {{if .GeneralError}}<div class="banner error" role="alert" tabindex="-1" id="general-error">{{.GeneralError}}</div>{{end}}
+      {{if .Errors}}
+      <div class="banner error" role="alert" tabindex="-1" id="error-summary">
+        <strong>Please fix the following:</strong>
+        <ul>
+          {{range $field, $msg := .Errors}}<li><a href="#{{$field}}">{{$msg}}</a></li>{{end}}
+        </ul>
+      </div>
+      {{end}}
+      {{if not .Ready}}<div class="banner warn">Heads up: email delivery isn't fully configured yet, so submitting may not work. You can email <strong>{{.Recipient}}</strong> directly in the meantime.</div>{{end}}
+
+      <form method="post" action="/contact/submit" novalidate>
+        <input type="hidden" name="{{.Honeypot}}" value="" tabindex="-1" autocomplete="off" aria-hidden="true" class="hp">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        {{$type := index .Values "type"}}
+        <label for="type">Type <span class="req">*</span></label>
+        <select id="type" name="type" {{if index .Errors "type"}}aria-invalid="true" aria-describedby="type-err"{{end}} required>
+          <option value="" {{if eq $type ""}}selected{{end}} disabled>Choose…</option>
+          {{range .Kinds}}<option value="{{.Value}}" {{if eq .Value $type}}selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+        {{with index .Errors "type"}}<p class="field-err" id="type-err">{{.}}</p>{{end}}
+
+        <label for="name">Your name <span class="req">*</span></label>
+        <input id="name" name="name" value="{{index .Values "name"}}" maxlength="200" {{if index .Errors "name"}}aria-invalid="true" aria-describedby="name-err"{{end}} required>
+        {{with index .Errors "name"}}<p class="field-err" id="name-err">{{.}}</p>{{end}}
+
+        <label for="email">Your email <span class="req">*</span></label>
+        <input id="email" name="email" type="email" value="{{index .Values "email"}}" maxlength="320" aria-describedby="email-hint{{if index .Errors "email"}} email-err{{end}}"{{if index .Errors "email"}} aria-invalid="true"{{end}} required>
+        {{if .AllowedDomain}}<p class="hint" id="email-hint">Use your @{{.AllowedDomain}} address. We reply to this address.</p>{{else}}<p class="hint" id="email-hint">We reply to this address.</p>{{end}}
+        {{with index .Errors "email"}}<p class="field-err" id="email-err">{{.}}</p>{{end}}
+
+        <label for="page">Page or area (optional)</label>
+        <input id="page" name="page" value="{{index .Values "page"}}" maxlength="500" {{if index .Errors "page"}}aria-invalid="true" aria-describedby="page-err"{{end}} placeholder="e.g. the page URL this is about">
+        {{with index .Errors "page"}}<p class="field-err" id="page-err">{{.}}</p>{{end}}
+
+        <label for="summary">Summary <span class="req">*</span></label>
+        <input id="summary" name="summary" value="{{index .Values "summary"}}" maxlength="200" {{if index .Errors "summary"}}aria-invalid="true" aria-describedby="summary-err"{{end}} required placeholder="One line describing it">
+        {{with index .Errors "summary"}}<p class="field-err" id="summary-err">{{.}}</p>{{end}}
+
+        <label for="details">Details</label>
+        <textarea id="details" name="details" maxlength="8000" {{if index .Errors "details"}}aria-invalid="true" aria-describedby="details-err"{{end}} placeholder="Steps to reproduce, what you expected, anything that helps">{{index .Values "details"}}</textarea>
+        {{with index .Errors "details"}}<p class="field-err" id="details-err">{{.}}</p>{{end}}
+
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </main>
+  {{template "theme-script" .}}
+  <script>
+    // On an error re-render, move focus to the alert so a screen-reader / keyboard
+    // user lands on the problem instead of silently at the top (WCAG 3.3.1, 2.4.3).
+    (function () {
+      var a = document.getElementById("error-summary") || document.getElementById("general-error");
+      if (a && typeof a.focus === "function") a.focus();
+    })();
+  </script>
+</body>
+</html>

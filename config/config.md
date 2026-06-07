@@ -147,6 +147,37 @@ Read by [deploy/local/compose.yaml](../deploy/local/compose.yaml). Defaults show
 | `SAML2_EXTERNAL_ID_ATTRIBUTE` | `eduPersonPrincipalName` |
 | `SAML2_USER_TO_GROUPS` | `false` (group→role sync OFF until the real released attribute is confirmed) |
 
+## 1b) Contact-form service (issue #15) — change in `deploy/local/.env`
+
+The `services/contact` container (run behind the `contact` compose profile;
+`dev-up.sh` enables it) serves the wiki's **Contact** page, emails
+`CONTACT_RECIPIENT`, and optionally files a GitHub issue. No-IT delivery uses
+**AgentMail** (an email API for agents — recommended; sends from your
+`agentmail.to` inbox with SPF/DKIM/DMARC handled, API-key auth, free tier).
+Alternatives — SMTP (Gmail App Password / own-domain + Brevo / AWS SES) and M365
+Graph — are in the [contact-form runbook](../docs/runbooks/contact-form.md). Secrets
+(`MAIL_USERNAME`/`MAIL_PASSWORD`, `CONTACT_INTAKE_GITHUB_TOKEN`,
+`MS_CLIENT_SECRET`) live in `.env` ([.env.example](.env.example) §5), not here.
+
+| Key | Default | Notes |
+|---|---|---|
+| `CONTACT_URL` | `http://localhost:8081/contact` | Where the form is served; the header link (applied by `apply-brand.sh`) points here. On connor-server use the LAN URL, e.g. `http://10.76.88.214:8081/contact`. |
+| `CONTACT_BIND` | `8081` | Host port the service binds (maps to container `8080`). |
+| `CONTACT_RECIPIENT` | `cccadmin@vanderbilt.edu` | Fixed `To:` — submissions land here (Outlook rule → `Contact_form`). Never client-supplied. |
+| `CONTACT_ALLOWED_EMAIL_DOMAIN` | `vanderbilt.edu` | Approved-sender gate; empty = any. `CONTACT_ALLOWED_SENDERS` (CSV) is an exact-address override. |
+| `MAIL_TRANSPORT` | `agentmail` | `agentmail` (recommended) · `smtp` (Gmail/Brevo/SES) · `graph` (M365 send-as). |
+| `AGENTMAIL_INBOX` | `ccc-3278@agentmail.to` | agentmail only — the sending inbox (also the `From`); set its display name in the AgentMail console. |
+| `AGENTMAIL_API_BASE` | `https://api.agentmail.to` | agentmail only — override only for tests. (`AGENTMAIL_API_KEY` is a secret → `.env`.) |
+| `MAIL_FROM_ADDRESS` | `cccwiki.contact@gmail.com` | smtp only — `From:`; for Gmail must equal `MAIL_USERNAME`. Reply-To is always the submitter. |
+| `MAIL_FROM_NAME` | `CCC Wiki Contact` | smtp only — `From:` display name. |
+| `MAIL_HOST` / `MAIL_PORT` / `MAIL_ENCRYPTION` | `smtp.gmail.com` / `587` / `starttls` | smtp only. SES later: `email-smtp.<region>.amazonaws.com`. |
+| `CONTACT_GITHUB_REPO` | `PMQ9/ccc-internal-documentation` | Repo for auto-filed issues (label by type: bug→bug, request→enhancement, feedback→feedback, other→question). Empty token disables. |
+| `CONTACT_RATE_LIMIT_PER_HOUR` | `20` | Per source IP — submit **attempts**/hour (counts every parseable POST, valid or not; oversized/unparseable bodies are rejected first). |
+| `CONTACT_GLOBAL_RATE_LIMIT_PER_HOUR` | `100` | Aggregate circuit-breaker — **would-be-sends**/hour across all IPs (charged only after CSRF/honeypot/validation pass, so junk can't trip it and lock out real users); caps mailbox volume even when no single IP is over its limit. Trips fail-safe; auto-resets. |
+| `CONTACT_GITHUB_DAILY_CAP` | `50` | Max GitHub issues filed per 24h. Over the cap, the email still sends; only the issue is skipped. |
+| `CONTACT_TRUST_PROXY` / `CONTACT_SECURE_COOKIE` | `false` / `false` | Set both `true` on AWS (behind the ALB, over HTTPS). Enforced: `TRUST_PROXY=true` without `SECURE_COOKIE=true` fails `/readyz` (the CSRF cookie must not ride cleartext). |
+| `CONTACT_TRUSTED_PROXY_HOPS` | `1` | Only with `CONTACT_TRUST_PROXY=true`: # of trusted proxies appending `X-Forwarded-For`. The client IP is read that-many entries from the **right** (1 = a single ALB), so a client can't forge it. |
+
 ## 2) Deploy script knobs — change in shell env when invoking the script
 
 Toggles for [dev-up.sh](../deploy/local/dev-up.sh) / [deploy-remote.sh](../deploy/local/deploy-remote.sh) /
@@ -255,8 +286,8 @@ re-applies these on every deploy and **overwrites live UI brand edits**. See
 
 | Token | Value | Notes |
 |---|---|---|
-| App color (CCC Oak) | `#946E24` | `app-color` / `app-color-dark` in apply-brand.sh. **Keep in sync** with the CSS token `--ccc-gold-oak` in [ccc-custom-head.html](../deploy/branding/ccc-custom-head.html). |
-| App color tint | `rgba(148,110,36,0.15)` | `app-color-light` / `app-color-light-dark`. |
+| App color (CCC black) | `#1C1C1C` | `app-color` / `app-color-dark` in apply-brand.sh. Black because BookStack paints the header with it and strips the custom head on `/settings/{category}` pages (issue #40); the head re-points `--color-primary` to Oak (`--ccc-gold-oak`) for buttons elsewhere. |
+| App color tint | `rgba(148,110,36,0.15)` | `app-color-light` / `app-color-light-dark` — the Oak accent tint (subtle selected/hover fills). |
 | App name | `CCC Wiki` | From `APP_NAME` (§1); apply-brand.sh tracks it. |
 | Logo / favicon | `assets/ccc-logo-reversed.svg`, `ccc-favicon.svg` | Override paths via `HEAD_FILE` / `LOGO_FILE` / `FAVICON_FILE`. |
 
@@ -278,12 +309,12 @@ Add these knobs when the feature lands, so nothing gets hardcoded.
 
 | Issue | Feature | New config to add |
 |---|---|---|
-| #22 | Outbound email (SES) | `MAIL_DRIVER=smtp`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_ENCRYPTION`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` (creds → `.env` / Secrets Manager) |
+| #22 | Outbound email (SES) — BookStack's **own** mail (invites/resets/notifications) | `MAIL_DRIVER=smtp`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_ENCRYPTION`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` (creds → `.env` / Secrets Manager). NB: the contact form (#15) already delivers via its own SMTP relay (§1b) — this row is BookStack's separate transactional mail. |
 | #19 | WAF on the ALB | rate-limit threshold (req/5min), managed rule-group selection |
 | #20 | Cost guardrails | monthly budget amount, alert thresholds (50/80/100%), notify email, cost-allocation tag set |
 | #21 | Audit log export | export S3 bucket name, retention days |
 | #27 | Agent write API | BookStack REST base URL, sanctioned endpoints, "Agent author" role name |
 | #28 / #29 | CLI + MCP client | API base URL + token via env/config (token never logged) |
 | #12 | Tag-gated deploy | release tag pattern (e.g. `v*.*.*`) that triggers the AWS image push |
-| #15 | Contact-page intake | target GitHub repo, destination mailbox, issue label map |
+| #15 | Contact-page intake — **shipped** (`services/contact`) | Configured now via `deploy/local/.env` (§1b) + secrets in [.env.example](.env.example) §5. |
 | #5 | SSM/secrets VPC endpoints | toggle for interface endpoints (ssm / ssmmessages / ec2messages [/ secretsmanager / logs]) |

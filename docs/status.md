@@ -56,6 +56,17 @@ Real CCC logo lockup (not a placeholder), favicon, and a custom-head CSS layer a
 BookStack UI; design language and WCAG 2.2 AA criteria documented. Applied once per environment, not
 in code.
 
+**Contact-form intake** ([../services/contact](../services/contact), issue #15)
+A small standard-library Go service serves the wiki's **Contact** page and turns each
+submission into one email to the CCC mailbox (`Reply-To` = the submitter) plus, optionally, a GitHub
+issue (best-effort). Transport is pluggable — `agentmail` (recommended; an email API for agents, no
+IT, no DMARC wall), `smtp` (Gmail App Password / own-domain + Brevo / AWS SES), or `graph` (M365
+send-as). Guarded by VPN + a login-gated header link + `@vanderbilt.edu` + CSRF + honeypot + per-IP
+rate-limit + a fixed recipient. Runs behind the `contact` compose profile on connor-server; Go unit
+tests + an isolated integration test ([../tests/integration/bats/08_contact.bats](../tests/integration/bats/08_contact.bats),
+MailHog sink) gate it. AWS routing is deferred to Phase 1 so the IaC is validated then. Setup +
+trade-offs: [runbooks/contact-form.md](runbooks/contact-form.md).
+
 **Architecture hardening + dev ergonomics** (PRs #6, #9, #14)
 Pin-drift fitness gate ([../tests/lib/check_pins.sh](../tests/lib/check_pins.sh)), user-data contract
 gate, engineering conventions in [../CLAUDE.md](../CLAUDE.md), a local `dev-up.sh` + VSCode run button,
@@ -140,6 +151,10 @@ now would be guessing. They map to [runbooks/vuit-coordination-checklist.md](run
 - 🔲 **Fargate / multi-node HA** — the documented step-up from ASG(1); not justified for a low-traffic
    internal wiki today.
 - 🔲 **`REVISION_LIMIT`** stays unlimited pending reconciliation with any Vanderbilt records-retention policy.
+- 🔲 **Contact form on AWS** — the service runs on connor-server now; its AWS wiring (ALB `/contact*`
+   rule + target group, the container in EC2 user-data, secrets in Secrets Manager) is added during
+   Phase 1, so the Terraform can be `validate`/`test`/scanner-checked then. Spec in
+   [runbooks/contact-form.md](runbooks/contact-form.md#aws-phase-1--remaining-work).
 
 ## Roadmap
 

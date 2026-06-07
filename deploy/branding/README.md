@@ -54,7 +54,7 @@ this directory it sets:
 |---|---|---|
 | App name | `app-name` | the `APP_NAME` env (compose `.env`, default `CCC Wiki`) |
 | Custom head (CSS/JS theme + UX features) | `app-custom-head` | [`ccc-custom-head.html`](./ccc-custom-head.html) |
-| Primary color | `app-color` (+ light/dark tints) | CCC Oak `#946E24` |
+| Primary color | `app-color` (+ light/dark tints) | CCC black `#1C1C1C` (BookStack paints the header with it; the head re-points `--color-primary` to Oak for buttons — issue #40) |
 | Logo | `app-logo` | [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg), staged into the uploads volume |
 | Favicon | `app-icon` (+ 180/128/64/32) | [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg) |
 
@@ -65,7 +65,8 @@ every user. See the deploy runbook's
 
 **Manual fallback** (an environment without the deploy, e.g. the first AWS bring-up): do each in
 Settings → Customization — paste `ccc-custom-head.html` into **Custom HTML Head Content**, set
-**Application primary color** to `#946E24`, and upload **Logo** =
+**Application primary color** to `#1C1C1C` (black — so the header is correct on the `/settings/*`
+pages that strip the custom head; the head re-paints buttons Oak elsewhere), and upload **Logo** =
 [`assets/ccc-logo-reversed.svg`](./assets/ccc-logo-reversed.svg) (white text, for the dark header; use
 [`assets/ccc-logo.svg`](./assets/ccc-logo.svg) on a light header) and **Favicon** =
 [`assets/ccc-favicon.svg`](./assets/ccc-favicon.svg). If your build rejects SVG uploads (some lock down
@@ -87,9 +88,10 @@ is server-side and can't see the user's OS). The model is small and has one sour
 | Question | Answer |
 |---|---|
 | Default for a new visitor? | The **OS** setting (`prefers-color-scheme`), and it tracks live OS changes. |
-| What if the user picks one? | Their choice wins and is remembered **per device** (`localStorage`), until they switch again. |
+| What if the user picks one? | Their choice wins and is remembered **per device**, written to **both** a host-scoped `ccc-color-scheme` cookie and `localStorage`. Read order: cookie → localStorage → OS. |
 | How many toggles? | **One.** BookStack renders a copy in the user dropdown *and* on the homepage; we hide the homepage copy and keep the dropdown one. The login page gets its own (no dropdown there). |
 | Where is it applied? | In `<head>` before first paint, so there's no light-then-dark flash. |
+| Why a cookie too? | Cookies are scoped by **host, not port**, so the choice bridges to the cross-port contact page (`:8081`) — `localStorage` can't (it's per-origin). The cookie is `path=/`, long-lived, `SameSite=Lax`, `Secure` under HTTPS, and **not** `HttpOnly` (client JS owns it; the value `dark`/`light` is non-sensitive). The contact service reads it server-side (issue #39). |
 
 Why client-side and not BookStack's setting: BookStack only offers a fixed instance default (light *or*
 dark) plus a per-user server toggle — neither follows the OS. Doing it in the head is the only lever
@@ -145,6 +147,10 @@ repo (BookStack isn't running in CI), so it's a manual gate against the live ins
       sidebar in **light** mode are ~4.2:1 — borderline; tracked in the brand guidelines §3.)
 - [ ] **One toggle.** The homepage no longer shows its own light/dark control; only the user-dropdown
       one remains. The Settings → Customization page is unaffected.
+- [ ] **Cross-port theme bridge (issue #39).** Pick Dark on the wiki, then open the contact page
+      (`:8081/contact`, or `/contact*` in prod) — it loads dark with no flash. Toggle it back to Light
+      on the contact page, return to the wiki, reload — the wiki is Light. A fresh browser (no choice)
+      follows the OS on both.
 - [ ] **Login screen.** Logged out, the login card shows a working theme toggle (top-right) and a
       show/hide control on the password field. Show/hide is keyboard-operable, has a visible focus
       ring, doesn't block paste or autofill, and its target is >= 24x24 px.

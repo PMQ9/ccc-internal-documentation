@@ -49,6 +49,12 @@ jobs:
               --exit-code 0 --severity HIGH,CRITICAL --no-progress --scanners vuln "$img"
             echo "::endgroup::"
           done
+      - name: trivy scan the contact image (built from source; std-lib-only on distroless)
+        run: |
+          docker build -t ccc-wiki-contact:scan services/contact
+          docker save ccc-wiki-contact:scan -o "$RUNNER_TEMP/contact.tar"
+          docker run --rm -v "$RUNNER_TEMP":/scan aquasec/trivy:0.71.0 image \
+            --exit-code 0 --severity HIGH,CRITICAL --no-progress --scanners vuln --input /scan/contact.tar
 
   links-online:
     name: docs · link check (online)
