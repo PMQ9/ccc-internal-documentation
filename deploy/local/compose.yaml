@@ -70,6 +70,8 @@ services:
       - AUTH_AUTO_INITIATE=${AUTH_AUTO_INITIATE:-false}
       # --- Revision history: indefinite (diffs + one-click restore are built in) ---
       - REVISION_LIMIT=${REVISION_LIMIT:-false}
+      # --- Recycle bin: auto-purge deleted content after N days (default: 30) ---
+      - RECYCLE_BIN_LIFETIME=${RECYCLE_BIN_LIFETIME:-7}
     volumes:
       # /config holds ALL persistent state: .env, files/ (attachments), images/, logs, cache.
       # This single volume is the durability boundary (EFS on AWS).
