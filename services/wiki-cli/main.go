@@ -13,14 +13,15 @@ import (
 var version = "dev"
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, os.Getenv))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, os.Stdin, os.Getenv))
 }
 
 // run is the composition root and the real entry point (main just wires os.* and exits
 // with its return). It parses global flags, dispatches to a handler, and maps the
-// handler's error to an exit code. Returning an int (not calling os.Exit) makes the whole
-// dispatch path table-testable.
-func run(argv []string, stdout, stderr io.Writer, getenv func(string) string) int {
+// handler's error to an exit code. Returning an int (not calling os.Exit), and taking
+// stdin/stdout/stderr + getenv as parameters, makes the whole dispatch path — including
+// the `--markdown-file -` stdin path — table-testable.
+func run(argv []string, stdout, stderr io.Writer, stdin io.Reader, getenv func(string) string) int {
 	g := newGlobalFlags()
 
 	// Help/version as the first token — handle before flag parsing so they always print
@@ -72,7 +73,7 @@ func run(argv []string, stdout, stderr io.Writer, getenv func(string) string) in
 		return codeUsage
 	}
 
-	cc := &cmdContext{g: g, stdout: stdout, stderr: stderr, stdin: os.Stdin, getenv: getenv}
+	cc := &cmdContext{g: g, stdout: stdout, stderr: stderr, stdin: stdin, getenv: getenv}
 	if err := h(context.Background(), cc, rest[2:]); err != nil {
 		writeError(stderr, g.json, err)
 		return exitCode(err)

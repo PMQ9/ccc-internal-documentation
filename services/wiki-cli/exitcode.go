@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 
 	wikiclient "github.com/PMQ9/ccc-internal-documentation/services/wiki-client"
@@ -52,8 +54,17 @@ func exitCode(err error) int {
 		case apiErr.StatusCode >= 500:
 			return codeServer
 		default:
+			// Other 4xx (400/409/422/429): a caller/server-state error the Agent-author
+			// role shouldn't normally produce — treat as unexpected (1), not retryable.
 			return codeError
 		}
+	}
+	// A post-retry transport timeout is an infra problem, not a caller error: map it to
+	// codeServer so a CI job can treat 5 as "retry later" (matches the documented contract).
+	// Other transport failures (e.g. connection refused — often a misconfig) stay codeError.
+	var netErr net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
+		return codeServer
 	}
 	return codeError
 }

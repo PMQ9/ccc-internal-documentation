@@ -10,6 +10,10 @@ import (
 // returns the content and whether a source was provided at all. These inputs are the
 // operator's own files at the operator's privilege — there is no untrusted-path boundary
 // to defend, and BookStack sanitizes the content on render, so the CLI transports it as-is.
+//
+// NOTE: a "-" source consumes stdin, which can only be read once. Each handler calls this
+// at most once with "-" (markdown XOR html is enforced before this is reached), so the
+// single-stream read is safe.
 func readSource(literal, file string, stdin io.Reader) (content string, provided bool, err error) {
 	switch {
 	case literal != "" && file != "":

@@ -1,11 +1,21 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	wikiclient "github.com/PMQ9/ccc-internal-documentation/services/wiki-client"
 )
+
+// fakeTimeout is a net.Error that reports a timeout — what http.Client.Do surfaces
+// (wrapped in *url.Error) when the per-request timeout fires.
+type fakeTimeout struct{}
+
+func (fakeTimeout) Error() string   { return "i/o timeout" }
+func (fakeTimeout) Timeout() bool   { return true }
+func (fakeTimeout) Temporary() bool { return true }
 
 func TestExitCodeMapping(t *testing.T) {
 	cases := []struct {
@@ -21,6 +31,9 @@ func TestExitCodeMapping(t *testing.T) {
 		{"server500", &wikiclient.APIError{StatusCode: 500}, codeServer},
 		{"server503", &wikiclient.APIError{StatusCode: 503}, codeServer},
 		{"client422", &wikiclient.APIError{StatusCode: 422}, codeError},
+		// Transport timeouts (post-retry) are infra, not caller error -> codeServer.
+		{"ctx-deadline", fmt.Errorf("wikiclient: GET /api/books: %w", context.DeadlineExceeded), codeServer},
+		{"net-timeout", fmt.Errorf("wikiclient: POST /api/pages: %w", fakeTimeout{}), codeServer},
 		{"other", errors.New("boom"), codeError},
 	}
 	for _, tc := range cases {

@@ -48,11 +48,12 @@ if errors.As(err, &apiErr) && apiErr.StatusCode == 403 {
 While the binaries (#28/#29) live in this repo (single repo, Phase 0), they import this module via a
 local `replace` directive; once it's tagged, by version.
 
-## Surface (this scaffold)
+## Surface
 
-Read/create/update for **books and pages** — enough to prove the pattern #28/#29 build on.
-`Chapter`, `Attachment`, and `Image` have models but not yet methods (added when a consumer needs
-them, per the repo's rule-of-three / subtraction bias).
+Read/create/update for **books, chapters, and pages**, plus **attachment and image upload** (the
+multipart path) — the sanctioned Agent-author surface. The `ccc-wiki` CLI
+([#28](https://github.com/PMQ9/ccc-internal-documentation/issues/28), [`../wiki-cli/`](../wiki-cli/))
+is the first consumer; the MCP server (#29) is the next.
 
 ## Tests
 

@@ -37,6 +37,17 @@ func TestRenderJSONListIsTopLevelArray(t *testing.T) {
 	}
 }
 
+func TestRenderJSONNilListIsArray(t *testing.T) {
+	var b bytes.Buffer
+	var nilBooks []wikiclient.Book // nil slice would marshal to `null` without normalization
+	if err := renderResult(&b, true, nilBooks); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(b.String()); got != "[]" {
+		t.Errorf("nil list --json = %q, want []", got)
+	}
+}
+
 func TestRenderHumanEmptyListNotError(t *testing.T) {
 	var b bytes.Buffer
 	if err := renderResult(&b, false, []wikiclient.Page{}); err != nil {

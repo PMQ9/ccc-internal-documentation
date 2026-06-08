@@ -115,6 +115,56 @@ func TestAttachmentUploadMultipart(t *testing.T) {
 	}
 }
 
+func TestPageUpdateMovesBook(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		_, _ = w.Write([]byte(`{"id":5,"name":"P","book_id":9}`))
+	}))
+	defer srv.Close()
+
+	cc, _, _ := testCC(t, srv.URL, true, "")
+	if err := cmdPageUpdate(context.Background(), cc, []string{"--id", "5", "--book", "9"}); err != nil {
+		t.Fatalf("cmdPageUpdate: %v", err)
+	}
+	if gotMethod != http.MethodPut || gotPath != "/api/pages/5" {
+		t.Errorf("got %s %s, want PUT /api/pages/5", gotMethod, gotPath)
+	}
+	if !strings.Contains(gotBody, `"book_id":9`) {
+		t.Errorf("update body missing the book_id move: %s", gotBody)
+	}
+}
+
+func TestPageCreateBookAndChapterRejected(t *testing.T) {
+	cc, _, _ := testCC(t, "http://unused", false, "")
+	err := cmdPageCreate(context.Background(), cc, []string{"--book", "1", "--chapter", "2", "--name", "X", "--markdown", "y"})
+	if exitCode(err) != codeUsage {
+		t.Errorf("both --book and --chapter (create): exit %d, want %d (%v)", exitCode(err), codeUsage, err)
+	}
+}
+
+func TestPageUpdateBookAndChapterRejected(t *testing.T) {
+	cc, _, _ := testCC(t, "http://unused", false, "")
+	err := cmdPageUpdate(context.Background(), cc, []string{"--id", "5", "--book", "1", "--chapter", "2"})
+	if exitCode(err) != codeUsage {
+		t.Errorf("both --book and --chapter (update): exit %d, want %d (%v)", exitCode(err), codeUsage, err)
+	}
+}
+
+func TestPageCreateEmptyBodyFileRejected(t *testing.T) {
+	fp := filepath.Join(t.TempDir(), "empty.md")
+	if err := os.WriteFile(fp, []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cc, _, _ := testCC(t, "http://unused", false, "")
+	err := cmdPageCreate(context.Background(), cc, []string{"--book", "1", "--name", "X", "--markdown-file", fp})
+	if exitCode(err) != codeUsage {
+		t.Errorf("empty body file: exit %d, want %d (%v)", exitCode(err), codeUsage, err)
+	}
+}
+
 func TestImageUploadBadTypeRejected(t *testing.T) {
 	fp := filepath.Join(t.TempDir(), "x.png")
 	if err := os.WriteFile(fp, []byte("png"), 0o600); err != nil {

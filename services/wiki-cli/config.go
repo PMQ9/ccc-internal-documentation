@@ -85,12 +85,18 @@ func resolveConfig(g *globalFlags, getenv func(string) string) (wikiclient.Confi
 // (--config or $CCC_WIKI_CONFIG). An explicit-but-missing file is an error; the default
 // path being absent is not.
 func configPath(g *globalFlags, getenv func(string) string) (path string, explicit bool) {
-	if g.seen["config"] && g.configPath != "" {
+	// An explicit --config (even an empty one) is honored as explicit, so `--config ""`
+	// surfaces a clear error in loadConfigFile rather than silently falling through.
+	if g.seen["config"] {
 		return g.configPath, true
 	}
 	if v := getenv("CCC_WIKI_CONFIG"); v != "" {
 		return v, true
 	}
+	// Default (non-explicit) path. os.UserHomeDir reads $HOME, so under root in a
+	// container/CI this is /root/.config/ccc-wiki/config; that's acceptable because the
+	// default file is optional (env/flags can fully configure) and a token file there
+	// still has to pass the 0600 perms check below.
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return "", false
@@ -104,6 +110,9 @@ func configPath(g *globalFlags, getenv func(string) string) (path string, explic
 // — since it holds a write-capable credential; otherwise the CLI refuses to read it.
 func loadConfigFile(path string, explicit bool) (map[string]string, error) {
 	if path == "" {
+		if explicit { // e.g. `--config ""` — a mistake, not "no config file"
+			return nil, usagef("--config was given an empty path")
+		}
 		return map[string]string{}, nil
 	}
 	info, err := os.Stat(path)

@@ -99,6 +99,12 @@ Token via env or a `0600` config file, never a flag, never printed. No delete/ad
 operator's own privilege; upload bodies are buffered in memory for retry, so very large files are a
 footgun (set `WIKI_MAX_RETRIES=0` to avoid replay).
 
+**Writes are at-least-once.** The core retries `5xx`/transport errors for every request, including
+the non-idempotent create + upload `POST`s. If BookStack commits a write but the response is lost
+(timeout, proxy 5xx), the retry can create a **duplicate** book/chapter/page/attachment/image.
+Duplicates are visible and recoverable (and `WIKI_MAX_RETRIES=0` disables retries for strict
+once-only semantics); the wiki's revision history makes any accidental write reversible.
+
 ## Develop / test
 
 ```bash

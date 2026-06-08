@@ -102,6 +102,20 @@ func TestMissingExplicitConfigErrors(t *testing.T) {
 	}
 }
 
+func TestExplicitEmptyConfigErrors(t *testing.T) {
+	g := newGlobalFlags()
+	g.seen["config"] = true
+	g.configPath = "" // `--config ""`
+	env := map[string]string{"WIKI_BASE_URL": "http://x", "WIKI_API_TOKEN": "id:sec"}
+	_, err := resolveConfig(g, envFrom(env))
+	if err == nil {
+		t.Fatal("expected an error for an explicit empty --config (not a silent fall-through)")
+	}
+	if exitCode(err) != codeUsage {
+		t.Errorf("explicit empty --config exit = %d, want %d", exitCode(err), codeUsage)
+	}
+}
+
 func TestResolveConfigMissingTokenErrorHasNoSecret(t *testing.T) {
 	env := map[string]string{"WIKI_BASE_URL": "http://x"} // no token anywhere
 	_, err := resolveConfig(newGlobalFlags(), envFrom(env))

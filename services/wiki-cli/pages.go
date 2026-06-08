@@ -60,6 +60,9 @@ func cmdPageCreate(ctx context.Context, cc *cmdContext, args []string) error {
 	if *book == 0 && *chapter == 0 {
 		return usagef("page create: one of --book or --chapter is required")
 	}
+	if *book != 0 && *chapter != 0 {
+		return usagef("page create: provide either --book or --chapter, not both")
+	}
 	mdBody, mdSet, err := readSource(*md, *mdFile, cc.stdin)
 	if err != nil {
 		return err
@@ -73,6 +76,11 @@ func cmdPageCreate(ctx context.Context, cc *cmdContext, args []string) error {
 	}
 	if !mdSet && !htmlSet {
 		return usagef("page create: a body is required (--markdown/--markdown-file or --html/--html-file)")
+	}
+	// A body source that resolves to empty (e.g. an empty file) would be dropped by the
+	// model's omitempty and 422 server-side — fail locally with a clear message instead.
+	if (mdSet && mdBody == "") || (htmlSet && htmlBody == "") {
+		return usagef("page create: the chosen body source is empty")
 	}
 	c, err := cc.client()
 	if err != nil {
@@ -103,6 +111,9 @@ func cmdPageUpdate(ctx context.Context, cc *cmdContext, args []string) error {
 	if *id == 0 {
 		return usagef("page update: --id is required")
 	}
+	if *book != 0 && *chapter != 0 {
+		return usagef("page update: move to either --book or --chapter, not both")
+	}
 	mdBody, mdSet, err := readSource(*md, *mdFile, cc.stdin)
 	if err != nil {
 		return err
@@ -113,6 +124,9 @@ func cmdPageUpdate(ctx context.Context, cc *cmdContext, args []string) error {
 	}
 	if mdSet && htmlSet {
 		return usagef("page update: provide either Markdown or HTML, not both")
+	}
+	if (mdSet && mdBody == "") || (htmlSet && htmlBody == "") {
+		return usagef("page update: the chosen body source is empty")
 	}
 	if *name == "" && *book == 0 && *chapter == 0 && !mdSet && !htmlSet {
 		return usagef("page update: nothing to change (set --name, --book, --chapter, or a body)")

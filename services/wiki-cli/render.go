@@ -15,7 +15,9 @@ import (
 // can leak it.
 func renderResult(out io.Writer, asJSON bool, v any) error {
 	if asJSON {
-		b, err := json.MarshalIndent(v, "", "  ")
+		// A nil typed slice marshals to `null`, which breaks the "a list is a top-level
+		// JSON array" promise for jq. Normalize an empty list to [] first.
+		b, err := json.MarshalIndent(normalizeJSONList(v), "", "  ")
 		if err != nil {
 			return err
 		}
@@ -60,8 +62,30 @@ func renderResult(out io.Writer, asJSON bool, v any) error {
 		}
 	default:
 		// A programming error (a new result type without a render arm) — surface it
-		// rather than printing nothing.
+		// rather than printing nothing. A new list command (e.g. attachment/image list)
+		// must add both a JSON normalize case below and a human arm here.
 		return fmt.Errorf("renderResult: no human renderer for %T", v)
 	}
 	return nil
+}
+
+// normalizeJSONList substitutes an empty slice for a nil typed slice so the --json output
+// of an empty list is `[]`, not `null` (BookStack returns `data:[]`, but this hardens the
+// contract regardless). Single resources pass through unchanged.
+func normalizeJSONList(v any) any {
+	switch r := v.(type) {
+	case []wikiclient.Book:
+		if r == nil {
+			return []wikiclient.Book{}
+		}
+	case []wikiclient.Chapter:
+		if r == nil {
+			return []wikiclient.Chapter{}
+		}
+	case []wikiclient.Page:
+		if r == nil {
+			return []wikiclient.Page{}
+		}
+	}
+	return v
 }

@@ -55,6 +55,11 @@ PHP
   AGENT_ROLE=$(printf '%s' "$AGENT_ROLE" | sed -nE 's/.*ROLEID:([0-9]+):.*/\1/p' | head -1)
   [ -n "$AGENT_ROLE" ] || skip "could not provision the Agent author role via tinker"
 
+  # Idempotency for --keep / repeated runs: drop any stale agent user + token first, so
+  # the create below doesn't collide on a duplicate email left by a prior run.
+  dbq "DELETE FROM api_tokens WHERE name='cli-agent-token';" >/dev/null 2>&1 || true
+  dbq "DELETE FROM users WHERE email='cli-agent@example.test';" >/dev/null 2>&1 || true
+
   AGENT_USER=$(api POST /api/users "{\"name\":\"CLI Agent\",\"email\":\"cli-agent@example.test\",\"password\":\"AgentPass-78901\",\"roles\":[$AGENT_ROLE]}" | json '.id')
 
   dc exec -T bookstack php /app/www/artisan bookstack:regenerate-permissions >/dev/null 2>&1
@@ -69,6 +74,11 @@ PHP
 }
 
 teardown_file() {
+  # Remove the agent token + user so a --keep stack doesn't accumulate orphans across
+  # runs. The shared "Agent author" role is left in place (config-as-code, used by 09 +
+  # the deploy script). Best-effort: the stack is torn down with `down -v` regardless.
+  dbq "DELETE FROM api_tokens WHERE name='cli-agent-token';" >/dev/null 2>&1 || true
+  dbq "DELETE FROM users WHERE email='cli-agent@example.test';" >/dev/null 2>&1 || true
   rm -rf "$REPO_ROOT/services/wiki-cli/bin" 2>/dev/null || true
 }
 

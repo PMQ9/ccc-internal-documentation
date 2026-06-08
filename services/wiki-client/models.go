@@ -39,8 +39,7 @@ type Page struct {
 	UpdatedAt     time.Time `json:"updated_at,omitempty"`
 }
 
-// Chapter groups pages within a book. (Model only in this scaffold — no methods
-// yet; added when a consumer needs them.)
+// Chapter groups pages within a book. See chapters.go for its CRUD methods.
 type Chapter struct {
 	ID          int64     `json:"id,omitempty"`
 	BookID      int64     `json:"book_id,omitempty"`
@@ -52,7 +51,7 @@ type Chapter struct {
 	UpdatedAt   time.Time `json:"updated_at,omitempty"`
 }
 
-// Attachment is a file (or link) attached to a page. (Model only in this scaffold.)
+// Attachment is a file (or link) attached to a page. See attachments.go for UploadAttachment.
 type Attachment struct {
 	ID         int64  `json:"id,omitempty"`
 	Name       string `json:"name"`
@@ -63,7 +62,7 @@ type Attachment struct {
 	Order    int  `json:"order,omitempty"`
 }
 
-// Image is a gallery or drawio image. (Model only in this scaffold.)
+// Image is a gallery or drawio image. See images.go for UploadImage.
 type Image struct {
 	ID         int64  `json:"id,omitempty"`
 	Name       string `json:"name"`
