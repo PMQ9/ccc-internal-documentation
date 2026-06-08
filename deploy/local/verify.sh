@@ -18,6 +18,18 @@ first_id(){ grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2; }
 pass(){ echo "  PASS: $1"; }
 fail(){ echo "  FAIL: $1"; FAILED=1; }
 FAILED=0
+TMP=
+
+cleanup(){
+  [ -n "$TMP" ] && rm -f "$TMP" "$TMP.png"
+  [ -z "${BOOK_ID:-}" ] && return 0
+  echo "  cleanup: removing fixture book=$BOOK_ID page=${PAGE_ID:-none}" >&2
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "${AUTH:-}" "$B/api/books/$BOOK_ID" 2>/dev/null) || code=000
+  [ "$code" = "204" ] || [ "$code" = "200" ] && return 0
+  echo "  WARN: cleanup DELETE returned $code (expected 204)" >&2
+}
+trap cleanup EXIT
 
 echo "=== 1. Anonymous gating (read-without-public-toggle is blocked; edit/admin require login) ==="
 for path in / /settings/users /books/create; do
@@ -64,6 +76,5 @@ IMG_FOUND=$(docker compose exec -T bookstack sh -c 'find /config -type f -path "
 [ -n "$ATT_FOUND" ] && pass "attachment on persistent volume: $ATT_FOUND" || fail "attachment not found under /config"
 [ -n "$IMG_FOUND" ] && pass "image on persistent volume: $IMG_FOUND" || fail "image not found under /config"
 
-rm -f "$TMP" "$TMP.png"
 echo "=== RESULT ==="
 [ "$FAILED" = "0" ] && echo "ALL AUTOMATED CHECKS PASSED" || { echo "SOME CHECKS FAILED"; exit 1; }
