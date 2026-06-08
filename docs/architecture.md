@@ -110,9 +110,11 @@ server (#29), which import a shared Go client core ([../services/wiki-client/](.
 - **Sanctioned endpoints (write):** `POST/PUT` on `/api/pages`, `/api/books`, `/api/chapters`,
   `POST /api/attachments`, `POST /api/image-gallery`; read via the matching `GET`s. Not sanctioned
   for agents (the role can't reach them anyway): any `DELETE`, `/api/users`, `/api/roles`, settings.
-  This is the **role/API** surface; the Go client core currently implements books + pages
-  (read/create/update), with chapters/attachments/images reachable via the role + raw API until a
-  consumer (#28/#29) needs typed methods.
+  This is the **role/API** surface; the Go client core implements typed methods across the whole of
+  it — books/chapters/pages (read/create/update) + attachment/image upload — consumed by the
+  **`ccc-wiki` CLI (#28)**: env/file token (never a flag), no delete/admin, HTTP-mapped exit codes;
+  see [../services/wiki-cli/README.md](../services/wiki-cli/README.md). The MCP server (#29) is the
+  next client.
 - **Token lifecycle is MANUAL** (the role is code; tokens are not): a human issues one short-lived
   token per agent against an Agent-author user, and rotates/revokes it in the UI — see the runbook.
 - **Access posture:** deny-by-default, LAN-only (Phase 0) / on-VPN (prod), same SG/VPN gate as the
@@ -160,4 +162,5 @@ EFS auto-heal across instance replacement. Covered in the AWS verification secti
 [../deploy/branding/README.md](../deploy/branding/README.md) (apply + a11y validation) ·
 [runbooks/connor-server-deploy.md](runbooks/connor-server-deploy.md) (live Phase-0 deploy) ·
 [runbooks/agent-api.md](runbooks/agent-api.md) (headless agent API) ·
+[../services/wiki-cli/README.md](../services/wiki-cli/README.md) (the `ccc-wiki` CLI) ·
 runbooks in [runbooks/](runbooks/).

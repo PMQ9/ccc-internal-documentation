@@ -37,3 +37,6 @@ _user_data.rendered.sh
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Compiled CLI binary (`make wiki-cli-build`); built from source, never committed.
+services/wiki-cli/bin/

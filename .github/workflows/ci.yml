@@ -132,6 +132,19 @@ jobs:
             apk add --no-cache gcc musl-dev >/dev/null
             CGO_ENABLED=1 go test -race -count=1 ./...'
 
+  wiki-cli:
+    name: wiki-cli · gofmt + vet + test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: ccc-wiki CLI checks (gofmt, vet, race tests)
+        run: |
+          docker run --rm -v "$PWD":/work -w /work/services/wiki-cli golang:1.23-alpine sh -c '
+            test -z "$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }
+            go vet ./...
+            apk add --no-cache gcc musl-dev >/dev/null
+            CGO_ENABLED=1 go test -race -count=1 ./...'
+
   contact-unit:
     name: contact · gofmt + vet + test (race)
     runs-on: ubuntu-latest

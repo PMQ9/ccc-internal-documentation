@@ -21,10 +21,9 @@
 // "Token <token_id>:<secret>". The token is read from the environment, never from
 // a flag, and is never logged or placed in an error message.
 //
-// Scope: this scaffold ships read/create/update for books and pages — enough to
-// prove the pattern the CLI and MCP server build on. Chapters, attachments, and
-// images have data models but not yet methods (added when a consumer needs them,
-// per the repo's rule-of-three / subtraction bias).
+// Scope: read/create/update for books, chapters, and pages, plus attachment and image
+// upload (the multipart path) — the sanctioned Agent-author surface. The ccc-wiki CLI
+// (#28, services/wiki-cli/) is the first consumer; the MCP server (#29) is the next.
 //
 // See docs/runbooks/agent-api.md and docs/architecture.md ("Headless agent API").
 package wikiclient

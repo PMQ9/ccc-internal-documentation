@@ -83,6 +83,14 @@ This table is the canonical list (architecture.md summarizes it).
 | DELETE | any `/api/*` | delete content | **no — 403** |
 | any | `/api/users`, `/api/roles`, settings | admin surfaces | **no — 403** |
 
+## Clients
+
+Two sanctioned clients share the Go core in [../../services/wiki-client/](../../services/wiki-client/):
+the **`ccc-wiki` CLI** (#28) — see [../../services/wiki-cli/README.md](../../services/wiki-cli/README.md)
+for commands, auth, and exit codes — and the MCP server (#29). They authenticate with an Agent-author
+token exactly as above and add no capability the role doesn't grant (no delete/admin). The CLI takes
+its token only from `WIKI_API_TOKEN` or a `0600` config file, never a flag.
+
 ## Access posture
 
 LAN-only (Phase 0) / on-VPN (prod), deny-by-default — the same SG/VPN gate as the UI; `/api` is not
@@ -108,3 +116,5 @@ Append-only, dated.
   role (`apply-agent-role.sh`); tokens issued manually per agent; rate-limiting + audit logging
   deferred to a tracked follow-up. Least-privilege verified on v26.05-ls265: create/update 2xx with
   `page_revisions` rows; delete and `/api/users` both 403.
+- 2026-06-08 — Added the `ccc-wiki` CLI (#28) as a sanctioned client; usage runbook in
+  [../../services/wiki-cli/README.md](../../services/wiki-cli/README.md).
