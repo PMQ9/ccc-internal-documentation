@@ -21,6 +21,11 @@ setup_file() {
     golang:1.23-alpine go build -trimpath -ldflags="-s -w" -o /work/services/wiki-cli/bin/ccc-wiki . \
     >/dev/null 2>&1 || skip "could not build the ccc-wiki binary"
 
+  # Pre-pull the CLI runner image so a per-test `docker run` never emits pull progress
+  # to stderr — bats merges stderr into $output, and on a cold runner that noise would
+  # corrupt the JSON the tests parse (the CI failure that this guards against).
+  docker pull "$CLI_RUNNER_IMAGE" >/dev/null 2>&1 || skip "could not pull the CLI runner image $CLI_RUNNER_IMAGE"
+
   # Resolve the test stack's compose network (mirrors run.sh's volume-name resolution).
   local net
   net="$(docker network ls --format '{{.Name}}' | grep -E "^${PROJECT}_default$" | head -1)"
