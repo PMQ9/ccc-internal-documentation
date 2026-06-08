@@ -269,13 +269,19 @@ if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
   phase "T-010: content + media survive 'down && up' (volume retained)"
 
   # Create fingerprint data that the bats tests will check after restart.
-  export PERSIST_BOOK_ID=$(api POST /api/books '{"name":"Persist Book"}' | json '.id')
-  export PERSIST_PAGE_ID=$(api POST /api/pages "{\"book_id\":$PERSIST_BOOK_ID,\"name\":\"Persist Page\",\"markdown\":\"# persist-marker-PERSIST\"}" | json '.id')
+  # Declare-then-export (not `export FOO=$(...)`) so a failing subshell isn't masked
+  # by export's own exit status (shellcheck SC2155). These are exported because
+  # 10_persistence.bats reads them from the environment.
+  PERSIST_BOOK_ID=$(api POST /api/books '{"name":"Persist Book"}' | json '.id')
+  export PERSIST_BOOK_ID
+  PERSIST_PAGE_ID=$(api POST /api/pages "{\"book_id\":$PERSIST_BOOK_ID,\"name\":\"Persist Page\",\"markdown\":\"# persist-marker-PERSIST\"}" | json '.id')
+  export PERSIST_PAGE_ID
   printf 'persist attachment\n' > "$WORK/persist.txt"
   curl -s -o /dev/null -H "Authorization: Token $ADMIN_TOKEN" \
     -F "uploaded_to=$PERSIST_PAGE_ID" -F "name=persist.txt" -F "file=@$WORK/persist.txt;filename=persist.txt" \
     "$BASE_URL/api/attachments"
-  export PERSIST_ATT_BASE=$(dbq "SELECT path FROM attachments WHERE name='persist.txt' ORDER BY id DESC LIMIT 1;" | awk -F/ '{print $NF}')
+  PERSIST_ATT_BASE=$(dbq "SELECT path FROM attachments WHERE name='persist.txt' ORDER BY id DESC LIMIT 1;" | awk -F/ '{print $NF}')
+  export PERSIST_ATT_BASE
 
   # Restart the stack (no volume wipe).
   dc down >/dev/null 2>&1          # NOTE: no -v
