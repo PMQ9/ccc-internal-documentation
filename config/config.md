@@ -315,7 +315,8 @@ Add these knobs when the feature lands, so nothing gets hardcoded.
 | #20 | Cost guardrails | monthly budget amount, alert thresholds (50/80/100%), notify email, cost-allocation tag set |
 | #21 | Audit log export | export S3 bucket name, retention days |
 | #27 | Agent write API — **shipped** (native BookStack REST + config-as-code role) | "Agent author" role provisioned by [`deploy/local/apply-agent-role.sh`](../deploy/local/apply-agent-role.sh) every deploy (`SKIP_AGENT_ROLE` in §2); base URL `<APP_URL>/api`; sanctioned endpoints + token lifecycle in [`docs/runbooks/agent-api.md`](../docs/runbooks/agent-api.md). Shared client core in `services/wiki-client/` (`WIKI_BASE_URL`/`WIKI_API_TOKEN`, see #28/#29 row). Rate-limit/audit deferred (follow-up). |
-| #28 / #29 | CLI + MCP client | API base URL + token via env/config (token never logged) |
+| #28 | `ccc-wiki` CLI — **shipped** (`services/wiki-cli`) | Reuses the core's `WIKI_BASE_URL`/`WIKI_API_TOKEN` (env), or a **0600** config file (`--config` / `$CCC_WIKI_CONFIG` / `~/.config/ccc-wiki/config`); **never a `--token` flag**, never printed. No new server-side config. Usage: [`services/wiki-cli/README.md`](../services/wiki-cli/README.md). |
+| #29 | MCP server client — pending | API base URL + token via env/config (token never logged), same core as #28. |
 | #12 | Tag-gated deploy | release tag pattern (e.g. `v*.*.*`) that triggers the AWS image push |
 | #15 | Contact-page intake — **shipped** (`services/contact`) | Configured now via `deploy/local/.env` (§1b) + secrets in [.env.example](.env.example) §5. |
 | #5 | SSM/secrets VPC endpoints | toggle for interface endpoints (ssm / ssmmessages / ec2messages [/ secretsmanager / logs]) |

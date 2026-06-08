@@ -19,7 +19,7 @@ RENDER="$ROOT/tests/lib/render_user_data.sh"
 VARS="$ROOT/terraform/variables.tf"
 TFTPL="$ROOT/terraform/user-data.sh.tftpl"
 DOCKERFILE="$ROOT/services/contact/Dockerfile"
-GOMODS=("$ROOT/services/contact/go.mod" "$ROOT/services/wiki-client/go.mod")
+GOMODS=("$ROOT/services/contact/go.mod" "$ROOT/services/wiki-client/go.mod" "$ROOT/services/wiki-cli/go.mod")
 
 fail=0
 note() { echo "  ok: $1"; }

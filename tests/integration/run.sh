@@ -176,6 +176,11 @@ fi
 if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
   BATS_FILES+=("$SCRIPT_DIR/bats/09_agent_role.bats")
 fi
+# CLI e2e (issue #28) — builds + runs ccc-wiki against the stack. PR/full only; it builds
+# a Go binary in a container, so it skips itself cleanly when Docker is unavailable.
+if [ "$PROFILE" = "pr" ] || [ "$PROFILE" = "full" ]; then
+  BATS_FILES+=("$SCRIPT_DIR/bats/12_cli.bats")
+fi
 BATS_BIN="$(command -v bats || true)"
 if [ -z "$BATS_BIN" ]; then
   echo "bats not on PATH; fetching pinned bats-core ${BATS_VERSION:-1.13.0}…"

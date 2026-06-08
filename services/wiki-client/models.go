@@ -8,9 +8,14 @@ import "time"
 // (a mismatch is silent: a wrong tag just unmarshals to the zero value).
 
 // Book is a top-level container of chapters and pages.
+//
+// Name uses omitempty deliberately: it is required on create (the caller always supplies
+// it), and on a PUT update omitempty lets a partial update — say, only the description —
+// avoid sending name:"" and clearing/rejecting it. An empty name is never a legal value,
+// so dropping it from the wire is always correct. Same reasoning on Chapter and Page.
 type Book struct {
 	ID          int64     `json:"id,omitempty"`
-	Name        string    `json:"name"`
+	Name        string    `json:"name,omitempty"`
 	Slug        string    `json:"slug,omitempty"`
 	Description string    `json:"description,omitempty"`
 	CreatedAt   time.Time `json:"created_at,omitempty"`
@@ -24,7 +29,7 @@ type Page struct {
 	ID            int64     `json:"id,omitempty"`
 	BookID        int64     `json:"book_id,omitempty"`
 	ChapterID     int64     `json:"chapter_id,omitempty"`
-	Name          string    `json:"name"`
+	Name          string    `json:"name,omitempty"`
 	Slug          string    `json:"slug,omitempty"`
 	Markdown      string    `json:"markdown,omitempty"`
 	HTML          string    `json:"html,omitempty"`
@@ -39,7 +44,7 @@ type Page struct {
 type Chapter struct {
 	ID          int64     `json:"id,omitempty"`
 	BookID      int64     `json:"book_id,omitempty"`
-	Name        string    `json:"name"`
+	Name        string    `json:"name,omitempty"`
 	Slug        string    `json:"slug,omitempty"`
 	Description string    `json:"description,omitempty"`
 	Priority    int       `json:"priority,omitempty"`

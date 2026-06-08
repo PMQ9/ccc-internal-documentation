@@ -67,6 +67,19 @@ tests + an isolated integration test ([../tests/integration/bats/08_contact.bats
 MailHog sink) gate it. AWS routing is deferred to Phase 1 so the IaC is validated then. Setup +
 trade-offs: [runbooks/contact-form.md](runbooks/contact-form.md).
 
+**Headless agent write API + CLI** ([../services/wiki-client](../services/wiki-client), [../services/wiki-cli](../services/wiki-cli), issues #27, #28)
+Sanctioned least-privilege writes on BookStack's built-in REST API: an **Agent author** role
+(config-as-code via `apply-agent-role.sh` — `access-api` + view/create/update on books/chapters/pages +
+media upload, **no delete/admin**) provisioned every deploy. A stdlib-only shared Go client core
+(`wiki-client` — auth, retries, typed models/errors, token never logged) is the seam, and the
+**`ccc-wiki` CLI** (#28) is the first client: token via env or a `0600` config file (never a flag,
+never printed), `--json` output, HTTP-mapped exit codes, no delete/admin commands. Gated by
+`make wiki-client-test` / `make wiki-cli-test` (incl. a token-never-in-output fitness test) + CI
+race-test jobs, and an end-to-end `12_cli.bats` (create+update a page → `page_revisions` row). The MCP
+server (#29) is the next client. Rate-limiting + per-request audit logging are deferred (tracked
+follow-up). Runbook: [runbooks/agent-api.md](runbooks/agent-api.md); CLI usage:
+[../services/wiki-cli/README.md](../services/wiki-cli/README.md).
+
 **Architecture hardening + dev ergonomics** (PRs #6, #9, #14)
 Pin-drift fitness gate ([../tests/lib/check_pins.sh](../tests/lib/check_pins.sh)), user-data contract
 gate, engineering conventions in [../CLAUDE.md](../CLAUDE.md), a local `dev-up.sh` + VSCode run button,

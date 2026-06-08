@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"math/big"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -71,20 +72,20 @@ func New(cfg Config, opts ...Option) (*Client, error) {
 
 const maxRespBody = 8 << 20 // 8 MiB cap on a response body we buffer/parse
 
-// do is the single request path: it builds the authed request, executes it under
-// the retry policy, maps a non-2xx to *APIError, and decodes a 2xx body into out
-// (out may be nil to discard). Every entity method routes through here, so auth,
-// retry, and error mapping live in exactly one place.
-func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
-	var bodyBytes []byte
-	if in != nil {
-		b, err := json.Marshal(in)
-		if err != nil {
-			return fmt.Errorf("wikiclient: marshal %s %s: %w", method, path, err)
-		}
-		bodyBytes = b
-	}
+// reqBuilder produces a fresh, unauthed *http.Request for one attempt. doRaw calls it
+// once per attempt, so it must read its body from buffered bytes (a consumed reader
+// can't replay across a retry) and set only the method, URL, body, and Content-Type.
+// doRaw adds Authorization and Accept — the token touches the wire in exactly one
+// place, regardless of body shape (JSON or multipart).
+type reqBuilder func(ctx context.Context) (*http.Request, error)
 
+// doRaw is the single request path: it authes the built request, executes it under the
+// retry policy (5xx/transport retried within budget with backoff+jitter, context-aware;
+// 4xx terminal), maps a non-2xx to *APIError, and decodes a 2xx body into out (out may
+// be nil to discard). Both the JSON path (do) and the multipart path (doUpload) route
+// through here, so auth, retry, and error mapping live in exactly one place. method and
+// path feed retry logging and the *APIError fields; build sets the request URL/body.
+func (c *Client) doRaw(ctx context.Context, method, path string, build reqBuilder, out any) error {
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
@@ -94,19 +95,12 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		}
 
 		// A fresh request + body reader each attempt (a consumed reader can't replay).
-		var bodyReader io.Reader
-		if bodyBytes != nil {
-			bodyReader = bytes.NewReader(bodyBytes)
-		}
-		req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
+		req, err := build(ctx)
 		if err != nil {
 			return fmt.Errorf("wikiclient: build request %s %s: %w", method, path, err)
 		}
 		req.Header.Set("Authorization", "Token "+c.token) // the one place the token touches the wire
 		req.Header.Set("Accept", "application/json")
-		if bodyBytes != nil {
-			req.Header.Set("Content-Type", "application/json")
-		}
 
 		resp, err := c.httpc.Do(req)
 		if err != nil {
@@ -145,6 +139,73 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		return nil
 	}
 	return lastErr
+}
+
+// do is the JSON request path: it marshals in (nil sends no body) once, then runs the
+// request under doRaw. Every JSON entity method (books, chapters, pages) routes through
+// here. The body is buffered so a 5xx retry can replay it.
+func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+	var bodyBytes []byte
+	if in != nil {
+		b, err := json.Marshal(in)
+		if err != nil {
+			return fmt.Errorf("wikiclient: marshal %s %s: %w", method, path, err)
+		}
+		bodyBytes = b
+	}
+	return c.doRaw(ctx, method, path, func(ctx context.Context) (*http.Request, error) {
+		var body io.Reader
+		if bodyBytes != nil {
+			body = bytes.NewReader(bodyBytes)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+		if err != nil {
+			return nil, err
+		}
+		if bodyBytes != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		return req, nil
+	}, out)
+}
+
+// doUpload is the multipart request path for media uploads (attachments, images). It
+// renders the form fields + one file part into a buffer ONCE — capturing the boundary —
+// then runs it through doRaw, so it inherits auth, retry, and error mapping. The body is
+// buffered (not streamed) so a 5xx retry can replay it with the SAME boundary; a fresh
+// multipart.Writer per attempt would mint a new boundary that wouldn't match the
+// already-buffered bytes. The whole file is therefore held in memory for the request's
+// lifetime — fine for wiki-scale media; a caller worried about a very large file can set
+// MaxRetries=0 (the body is still buffered once, but it won't be retried).
+func (c *Client) doUpload(ctx context.Context, method, path string, fields map[string]string, fileField, fileName string, r io.Reader, out any) error {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		if err := mw.WriteField(k, v); err != nil {
+			return fmt.Errorf("wikiclient: multipart field %s: %w", k, err)
+		}
+	}
+	fw, err := mw.CreateFormFile(fileField, fileName)
+	if err != nil {
+		return fmt.Errorf("wikiclient: multipart file part: %w", err)
+	}
+	if _, err := io.Copy(fw, r); err != nil {
+		return fmt.Errorf("wikiclient: read upload %q: %w", fileName, err)
+	}
+	if err := mw.Close(); err != nil { // writes the closing boundary
+		return fmt.Errorf("wikiclient: finalize multipart body: %w", err)
+	}
+	contentType := mw.FormDataContentType() // "multipart/form-data; boundary=..."
+	body := buf.Bytes()
+
+	return c.doRaw(ctx, method, path, func(ctx context.Context) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", contentType) // boundary must match the buffered body
+		return req, nil
+	}, out)
 }
 
 // backoff sleeps before a retry: exponential (baseDelay * 2^(attempt-1)) capped,

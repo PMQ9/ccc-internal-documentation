@@ -107,6 +107,15 @@ contact-test: ## gofmt + vet + go test the contact service (unit; no network/dep
 wiki-client-test: ## gofmt + vet + go test the shared wiki client core (unit; no network/deps, pinned go image)
 	$(DKR) -w /work/services/wiki-client $(GO_IMG) sh -c 'test -z "$$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }; go vet ./... && go test ./...'
 
+.PHONY: wiki-cli-test
+wiki-cli-test: ## gofmt + vet + go test the ccc-wiki CLI (unit; no network/deps, pinned go image)
+	$(DKR) -w /work/services/wiki-cli $(GO_IMG) sh -c 'test -z "$$(gofmt -l .)" || { echo "gofmt drift:"; gofmt -l .; exit 1; }; go vet ./... && go test ./...'
+
+.PHONY: wiki-cli-build
+wiki-cli-build: ## build a static ccc-wiki binary via the pinned go image -> services/wiki-cli/bin/ccc-wiki
+	$(DKR) -w /work/services/wiki-cli -e CGO_ENABLED=0 $(GO_IMG) \
+	  go build -trimpath -ldflags="-s -w" -o /work/services/wiki-cli/bin/ccc-wiki .
+
 .PHONY: stress-mixed
 stress-mixed: ## mixed read-write stress test (T-024)
 	python3 tests/stress/stress.py --base-url http://localhost:8089 \
@@ -131,15 +140,15 @@ apply-theme: ## re-apply the CCC brand (head + logo/favicon/color) to the runnin
 apply-agent-role: ## re-apply the least-privilege "Agent author" API role to the running stack (no restart; deploys do this automatically)
 	bash deploy/local/apply-agent-role.sh
 
-# NB: contact-test / wiki-client-test run `go test` WITHOUT -race (the alpine image
-# has no C toolchain). CI installs gcc/musl-dev and runs `go test -race -count=1`,
-# so a data race can pass `make check` but fail CI. To reproduce CI locally:
+# NB: contact-test / wiki-client-test / wiki-cli-test run `go test` WITHOUT -race (the
+# alpine image has no C toolchain). CI installs gcc/musl-dev and runs `go test -race
+# -count=1`, so a data race can pass `make check` but fail CI. To reproduce CI locally:
 #   docker run --rm -v "$(PWD)":/work -w /work/services/contact $(GO_IMG) \
 #     sh -c 'apk add --no-cache gcc musl-dev >/dev/null && CGO_ENABLED=1 go test -race ./...'
 
 # ---- aggregates -------------------------------------------------------------
 .PHONY: check
-check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract theme-bridge contact-test wiki-client-test stress-selftest ## all static/IaC gates
+check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract theme-bridge contact-test wiki-client-test wiki-cli-test stress-selftest ## all static/IaC gates
 
 .PHONY: integration
 integration: ## integration suite (PR profile)
