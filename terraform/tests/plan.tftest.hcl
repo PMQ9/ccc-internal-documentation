@@ -298,6 +298,68 @@ run "baseline_secure_plan" {
     condition     = can(regex(":v[0-9]+\\.[0-9]+-ls[0-9]+$", var.bookstack_image))
     error_message = "CFG-003: bookstack_image must be pinned to a vXX.YY-lsNNN tag."
   }
+
+  # ====================================================================
+  # part 2 additions (Claude Opus) — TF-020..TF-023
+  # Extra plan-time invariants the original suite didn't lock down.
+  # ====================================================================
+
+  # ---- TF-020 / OPS: subnet fan-out + ALB exposure + single-node sizing ----
+  assert {
+    condition = (
+      length(aws_subnet.public) == var.az_count &&
+      length(aws_subnet.private) == var.az_count
+    )
+    error_message = "TF-020: one public and one private subnet must be planned per AZ (az_count)."
+  }
+  assert {
+    # The ALB is internet-facing on purpose; its REACHABILITY is constrained by the
+    # VPN prefix list (asserted in TF-001/002), not by making the LB internal.
+    condition     = aws_lb.this.internal == false
+    error_message = "TF-020: the ALB is internet-facing (VPN-gated via the prefix list, not 'internal')."
+  }
+  assert {
+    # The whole design is ASG(1) — a single node (see the test plan's 'multi-instance
+    # out of scope' note). Pin it so a stray autoscale change is caught at plan.
+    condition = (
+      aws_autoscaling_group.this.min_size == 1 &&
+      aws_autoscaling_group.this.max_size == 1 &&
+      aws_autoscaling_group.this.desired_capacity == 1
+    )
+    error_message = "TF-020: the ASG must stay single-instance (min=max=desired=1) — multi-writer DB contention is out of scope."
+  }
+
+  # ---- TF-021 / SEC+OPS: launch-template IMDS endpoint + ALB->app contract ----
+  assert {
+    condition     = aws_launch_template.this.metadata_options[0].http_endpoint == "enabled"
+    error_message = "TF-021: IMDS endpoint must be enabled (with http_tokens=required => IMDSv2-only)."
+  }
+  assert {
+    condition = (
+      aws_lb_target_group.this.port == 80 &&
+      aws_lb_target_group.this.protocol == "HTTP"
+    )
+    error_message = "TF-021: the target group must forward to the app on HTTP/80 (TLS terminates at the ALB)."
+  }
+
+  # ---- TF-022 / OPS: RDS engine + backup-retention wiring ----
+  assert {
+    condition = (
+      aws_db_instance.this.engine == "mysql" &&
+      aws_db_instance.this.engine_version == var.db_engine_version
+    )
+    error_message = "TF-022: RDS must run the configured MySQL engine/version."
+  }
+  assert {
+    condition     = aws_db_instance.this.backup_retention_period == var.db_backup_retention_days
+    error_message = "TF-022: RDS automated-backup retention must track var.db_backup_retention_days (PITR window)."
+  }
+
+  # ---- TF-023 / OPS: app log group retention is bounded (not infinite) ----
+  assert {
+    condition     = aws_cloudwatch_log_group.app.retention_in_days == var.log_retention_days
+    error_message = "TF-023: the BookStack log group must set a finite retention (var.log_retention_days), never 0/never-expire."
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -323,5 +385,61 @@ run "tf003_imported_cert_skips_acm" {
   assert {
     condition     = length(aws_acm_certificate.this) == 0
     error_message = "When an imported certificate_arn is supplied, no ACM certificate should be requested."
+  }
+}
+
+# =============================================================================
+# part 2 additions (Claude Opus) — input-validation NEGATIVE tests + AZ scaling.
+#
+# The variable `validation {}` blocks are themselves load-bearing (a bad VPN CIDR
+# or cert ARN is the kind of typo that silently breaks access control). expect_failures
+# turns "this input MUST be rejected at plan time" into an asserted property — the
+# negative twin of the positive runs above.
+# =============================================================================
+
+# ---- TF-018 / SEC-002: a malformed VPN CIDR must be rejected at plan, not at apply ----
+run "tf018_malformed_vpn_cidr_rejected" {
+  command = plan
+
+  variables {
+    vpn_ingress_cidrs = ["not-a-cidr"]
+  }
+
+  expect_failures = [var.vpn_ingress_cidrs]
+}
+
+# ---- TF-019 / SEC-003: a non-ACM certificate_arn must be rejected at plan ----
+run "tf019_bad_certificate_arn_rejected" {
+  command = plan
+
+  variables {
+    certificate_arn = "this-is-not-an-arn"
+  }
+
+  expect_failures = [var.certificate_arn]
+}
+
+# ---- TF-024 / OPS-005: subnet + EFS mount-target fan-out scales with az_count ----
+# Proves the cidrsubnet() math and the data.aws_availability_zones slice scale a
+# 3-AZ apply correctly (one public + one private subnet and one EFS mount target
+# per AZ) — the parameter-drives-fan-out edge the default az_count=2 never exercises.
+run "tf024_scales_with_az_count" {
+  command = plan
+
+  variables {
+    az_count = 3
+  }
+
+  assert {
+    condition     = length(aws_subnet.public) == 3
+    error_message = "TF-024: az_count=3 must plan 3 public subnets."
+  }
+  assert {
+    condition     = length(aws_subnet.private) == 3
+    error_message = "TF-024: az_count=3 must plan 3 private subnets."
+  }
+  assert {
+    condition     = length(aws_efs_mount_target.this) == 3
+    error_message = "TF-024: az_count=3 must plan one EFS mount target per AZ."
   }
 }

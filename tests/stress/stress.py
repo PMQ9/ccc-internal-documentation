@@ -112,6 +112,22 @@ def run_mixed(base: str, token: str, page_id: int, concurrency: int, per_worker:
     return _drive(work, jobs, concurrency)
 
 
+def _gate(summary: dict, max_p95_ms: float | None = None) -> tuple[bool, str]:
+    """Pure pass/fail decision over a run summary — separated from main() so it can
+    be unit-tested (stress_selftest.py) without driving real load.
+
+    Always fails on any 5xx or transport error (the resilience contract). When
+    --max-p95-ms is given, additionally enforces a p95 latency budget (the PERF SLO
+    knob the test plan's non-functional checks call for).
+    """
+    if summary["server_errors_5xx"] > 0 or summary["transport_errors"] > 0:
+        return False, (f"{summary['server_errors_5xx']} 5xx, "
+                       f"{summary['transport_errors']} transport errors")
+    if max_p95_ms is not None and summary["p95_ms"] > max_p95_ms:
+        return False, f"p95 {summary['p95_ms']}ms exceeds budget {max_p95_ms}ms"
+    return True, "ok"
+
+
 def _drive(work, items, concurrency: int) -> dict:
     codes: dict[int, int] = {}
     latencies: list[float] = []
@@ -156,6 +172,8 @@ def main() -> int:
     ap.add_argument("--page-id", type=int, help="(edit mode) page to hammer")
     ap.add_argument("--paths", default="/icon.png,/api/books,/login",
                     help="(read mode) comma-separated paths to rotate through")
+    ap.add_argument("--max-p95-ms", type=float, default=None,
+                    help="optional PERF gate: fail (exit 1) if p95 latency exceeds this many ms")
     args = ap.parse_args()
 
     if args.mode == "read":
@@ -173,10 +191,9 @@ def main() -> int:
                            args.concurrency, args.per_worker)
 
     print(json.dumps(summary, indent=2))
-    # Gate: any 5xx or transport error is a failure.
-    if summary["server_errors_5xx"] > 0 or summary["transport_errors"] > 0:
-        print(f"FAIL: {summary['server_errors_5xx']} 5xx, "
-              f"{summary['transport_errors']} transport errors", file=sys.stderr)
+    passed, reason = _gate(summary, args.max_p95_ms)
+    if not passed:
+        print(f"FAIL: {reason}", file=sys.stderr)
         return 1
     return 0
 

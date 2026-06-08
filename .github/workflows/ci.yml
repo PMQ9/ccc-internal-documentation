@@ -96,6 +96,8 @@ jobs:
         run: ./tests/lib/check_pins.sh
       - name: theme-bridge contract (wiki head == contact layout)
         run: ./tests/lib/check_theme_bridge.sh
+      - name: stress driver self-test (offline pure-logic unit tests)
+        run: python3 tests/stress/stress_selftest.py
 
   secrets:
     name: secrets · gitleaks

@@ -57,7 +57,7 @@ agent_api_status() { req_status "$(cat "$BATS_FILE_TMPDIR/agent_token")" "$1" "$
 
 @test "AGENT-004 agent can upload an attachment (2xx)" {
   bid=$(agent_api POST /api/books '{"name":"Agent Book 4"}' | json '.id')
-  pid=$(agent_api POST /api/pages "{\"book_id\":$bid,\"name":"Agent Attach Page\",\"markdown\":\"# attach\"}" | json '.id')
+  pid=$(agent_api POST /api/pages "{\"book_id\":$bid,\"name\":\"Agent Attach Page\",\"markdown\":\"# attach\"}" | json '.id')
   printf 'agent attachment payload\n' > "$BATS_FILE_TMPDIR/agent-attach.txt"
   run curl -s -o /dev/null -w '%{http_code}' \
     -H "Authorization: Token $(cat "$BATS_FILE_TMPDIR/agent_token")" \
@@ -88,4 +88,19 @@ agent_api_status() { req_status "$(cat "$BATS_FILE_TMPDIR/agent_token")" "$1" "$
   pid=$(agent_api POST /api/pages "{\"book_id\":$bid,\"name\":\"To Delete\",\"markdown\":\"# x\"}" | json '.id')
   run agent_api_status DELETE "/api/pages/$pid"
   assert_status_in "403 404" "$output" "agent must be denied page delete"
+}
+
+@test "AGENT-009 agent CANNOT create a user (403)" {
+  # Distinct from AGENT-006's GET: a least-privilege role must not be able to mint
+  # accounts (privilege-escalation guard), not merely be blind to the list.
+  run agent_api_status POST /api/users '{"name":"Sneaky","email":"sneaky@example.test","password":"SneakyPass-123"}'
+  assert_status 403 "$output" "agent must be denied user creation (no privilege escalation)"
+}
+
+@test "AGENT-010 a tampered agent token is rejected (401/403)" {
+  # Flip the secret half of the token; the id is real but the secret won't verify,
+  # so the same least-privilege identity can't be impersonated by guessing.
+  tid="$(cut -d: -f1 < "$BATS_FILE_TMPDIR/agent_token")"
+  run req_status "$tid:totally-wrong-secret" GET /api/books
+  assert_status_in "401 403" "$output" "a token with a wrong secret must be rejected"
 }

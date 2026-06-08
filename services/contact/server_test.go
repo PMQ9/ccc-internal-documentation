@@ -14,8 +14,12 @@ import (
 	"time"
 )
 
-// fakeMailer captures sent messages (and can simulate a transport failure).
+// fakeMailer captures sent messages (and can simulate a transport failure). It
+// is concurrency-safe: the real server calls Send from many request goroutines,
+// so the capture slice is mutex-guarded — otherwise `go test -race` (the CI
+// contract) flags the concurrent append in TestConcurrentSubmissions.
 type fakeMailer struct {
+	mu   sync.Mutex
 	sent []*Message
 	err  error
 }
@@ -24,8 +28,17 @@ func (f *fakeMailer) Send(_ context.Context, m *Message) error {
 	if f.err != nil {
 		return f.err
 	}
+	f.mu.Lock()
 	f.sent = append(f.sent, m)
+	f.mu.Unlock()
 	return nil
+}
+
+// count returns how many messages were captured, safe to call concurrently.
+func (f *fakeMailer) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.sent)
 }
 
 func testConfig() *Config {
@@ -742,8 +755,8 @@ func TestConcurrentSubmissions(t *testing.T) {
 	if sent.Load() == 0 {
 		t.Error("all 10 concurrent submissions failed when they should succeed")
 	}
-	if int(sent.Load()) > len(fm.sent) {
-		t.Errorf("concurrent sends under-counted: sent=%d fm.sent=%d", sent.Load(), len(fm.sent))
+	if int(sent.Load()) > fm.count() {
+		t.Errorf("concurrent sends under-counted: sent=%d fm.sent=%d", sent.Load(), fm.count())
 	}
 }
 

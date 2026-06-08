@@ -111,6 +111,10 @@ stress-mixed: ## mixed read-write stress test (T-024)
 	python3 tests/stress/stress.py --base-url http://localhost:8089 \
 	  --token "<id:secret>" --mode mixed --page-id 1 --concurrency 10 --per-worker 6
 
+.PHONY: stress-selftest
+stress-selftest: ## offline unit tests for the stress driver's pure logic (percentile/gate/aggregation)
+	python3 tests/stress/stress_selftest.py
+
 # ---- deploy (developer action; touches a remote host, so NOT in `check`) ----
 .PHONY: deploy
 deploy: ## rsync working tree to connor-server + (re)launch the stack (reuses dev-up.sh)
@@ -126,7 +130,7 @@ apply-agent-role: ## re-apply the least-privilege "Agent author" API role to the
 
 # ---- aggregates -------------------------------------------------------------
 .PHONY: check
-check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract theme-bridge contact-test wiki-client-test ## all static/IaC gates
+check: fmt validate tflint tf-test trivy checkov shellcheck compose-config actionlint secrets links pins user-data-contract theme-bridge contact-test wiki-client-test stress-selftest ## all static/IaC gates
 
 .PHONY: integration
 integration: ## integration suite (PR profile)

@@ -11,7 +11,8 @@ tests/
 │   ├── run.sh                    orchestrator: brings up an isolated stack, runs everything
 │   ├── helpers/load.bash         bats loader + tiny assertion helpers (no submodules)
 │   └── bats/*.bats               behavioral tests (gating, RBAC, revisions, agent-role, persistence, health, media, edge, negative, contact)
-└── stress/stress.py             concurrency/load driver (Python stdlib only) — read, edit, mixed modes
+├── stress/stress.py             concurrency/load driver (Python stdlib only) — read, edit, mixed modes; optional --max-p95-ms PERF gate
+└── stress/stress_selftest.py    offline unit tests for the driver's pure logic (percentile/gate/aggregation) — no stack needed
 terraform/tests/plan.tftest.hcl   IaC plan-time security/edge assertions (mocked providers)
 terraform/.tflint.hcl             tflint ruleset
 ```
@@ -69,8 +70,16 @@ python3 tests/stress/stress.py --base-url http://localhost:8089 \
   --token "<id:secret>" --mode edit  --page-id 1 --concurrency 8 --per-worker 5
 python3 tests/stress/stress.py --base-url http://localhost:8089 \
   --token "<id:secret>" --mode mixed  --page-id 1 --concurrency 10 --per-worker 6
+
+# add an optional p95 latency budget (fails with a non-zero exit if exceeded)
+python3 tests/stress/stress.py --base-url http://localhost:8089 \
+  --token "<id:secret>" --mode read --concurrency 50 --per-worker 20 --max-p95-ms 800
+
+# the driver's pure logic (percentile/gate/aggregation) — offline, no stack:
+python3 tests/stress/stress_selftest.py        # also: make stress-selftest
 ```
 
 ## Make targets
 
-`make test` runs the lot the way CI does. See [`Makefile`](../Makefile).
+`make test` runs the lot the way CI does. `make stress-selftest` runs the offline
+stress-driver unit tests (part of `make check`). See [`Makefile`](../Makefile).
