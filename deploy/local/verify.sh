@@ -18,6 +18,13 @@ first_id(){ grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2; }
 pass(){ echo "  PASS: $1"; }
 fail(){ echo "  FAIL: $1"; FAILED=1; }
 FAILED=0
+TMP=
+
+cleanup(){
+  [ -n "$TMP" ] && rm -f "$TMP" "$TMP.png"
+  [ -n "${BOOK_ID:-}" ] && curl -s -o /dev/null -X DELETE -H "${AUTH:-}" "$B/api/books/$BOOK_ID" || true
+}
+trap cleanup EXIT
 
 echo "=== 1. Anonymous gating (read-without-public-toggle is blocked; edit/admin require login) ==="
 for path in / /settings/users /books/create; do
