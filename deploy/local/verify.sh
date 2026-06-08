@@ -22,7 +22,21 @@ TMP=
 
 cleanup(){
   [ -n "$TMP" ] && rm -f "$TMP" "$TMP.png"
-  [ -n "${BOOK_ID:-}" ] && curl -s -o /dev/null -X DELETE -H "${AUTH:-}" "$B/api/books/$BOOK_ID" || true
+  [ -z "${BOOK_ID:-}" ] && return 0
+  echo "  cleanup: permanently removing fixture book=$BOOK_ID page=${PAGE_ID:-none}" >&2
+  local ok=0
+  if [ -n "${PAGE_ID:-}" ]; then
+    dbq "DELETE FROM comments WHERE commentable_id=$PAGE_ID AND commentable_type='page'" || ok=1
+    dbq "DELETE FROM page_revisions WHERE page_id=$PAGE_ID" || ok=1
+    dbq "DELETE FROM entity_page_data WHERE page_id=$PAGE_ID" || ok=1
+    dbq "DELETE FROM attachments WHERE uploaded_to=$PAGE_ID" || ok=1
+    dbq "DELETE FROM images WHERE uploaded_to=$PAGE_ID" || ok=1
+    dbq "DELETE FROM tags WHERE entity_id=$PAGE_ID" || true
+    dbq "DELETE FROM entities WHERE id=$PAGE_ID" || ok=1
+  fi
+  dbq "DELETE FROM entity_container_data WHERE entity_id=$BOOK_ID" || ok=1
+  dbq "DELETE FROM entities WHERE id=$BOOK_ID" || ok=1
+  [ "$ok" -eq 1 ] && echo "  WARN: cleanup encountered errors (check deploy log)" >&2
 }
 trap cleanup EXIT
 
@@ -69,8 +83,7 @@ ATT_BASE=$(dbq "SELECT path FROM attachments WHERE name='verify.txt' ORDER BY id
 ATT_FOUND=$(docker compose exec -T bookstack sh -c "find /config -type f -name '$ATT_BASE' 2>/dev/null | head -1")
 IMG_FOUND=$(docker compose exec -T bookstack sh -c 'find /config -type f -path "*uploads/images*" -name "verify.png" 2>/dev/null | head -1')
 [ -n "$ATT_FOUND" ] && pass "attachment on persistent volume: $ATT_FOUND" || fail "attachment not found under /config"
-[ -n "$IMG_FOUND" ] && pass "image on persistent volume: $IMG_FOUND" || fail "image not found under /config"
+  [ -n "$IMG_FOUND" ] && pass "image on persistent volume: $IMG_FOUND" || fail "image not found under /config"
 
-rm -f "$TMP" "$TMP.png"
 echo "=== RESULT ==="
 [ "$FAILED" = "0" ] && echo "ALL AUTOMATED CHECKS PASSED" || { echo "SOME CHECKS FAILED"; exit 1; }
