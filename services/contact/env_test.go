@@ -61,6 +61,12 @@ func TestEnvBoolHelper(t *testing.T) {
 // CONTACT_ALLOWED_SENDERS is a comma list that must be trimmed, lowercased, and
 // have empty entries dropped — the parsing the senderAllowed allowlist depends on.
 func TestLoadParsesAllowedSenders(t *testing.T) {
+	// Set the mail basics explicitly so this stays a test of sender PARSING even if
+	// validate() later grows a presence check on these (it would otherwise fail here
+	// for an unrelated reason).
+	t.Setenv("CONTACT_RECIPIENT", "dest@example.org")
+	t.Setenv("MAIL_FROM_ADDRESS", "from@example.org")
+	t.Setenv("MAIL_HOST", "smtp.example.org")
 	t.Setenv("CONTACT_ALLOWED_SENDERS", "  A@X.com , b@Y.com ,, ")
 	cfg, err := Load()
 	if err != nil {

@@ -6,6 +6,9 @@ load "../helpers/load"
 
 setup_file() {
   load "../helpers/load"
+  # Guard the admin credential up front: invoked outside run.sh (which exports it),
+  # the api/dbq helpers would send an empty token and fail with opaque errors.
+  [ -n "${ADMIN_TOKEN:-}" ] || skip "ADMIN_TOKEN not set (run via tests/integration/run.sh)"
   # We only run this test file when the stack goes through down/up; the
   # orchestrator (run.sh) signals this via PERSIST_BOOK_ID / PERSIST_PAGE_ID.
   if [ -z "${PERSIST_BOOK_ID:-}" ]; then
@@ -29,7 +32,7 @@ setup_file() {
     skip "PERSIST_PAGE_ID not set (not in persistence profile)"
   fi
   run poll_contains 60 "persist-marker-PERSIST" GET "/api/pages/$PERSIST_PAGE_ID"
-  assert_status 0 "$output" "page content must survive docker compose down && up"
+  assert_status 0 "$status" "page content must survive docker compose down && up"
 }
 
 @test "T-010 page is readable after down/up" {
@@ -37,7 +40,7 @@ setup_file() {
     skip "PERSIST_PAGE_ID not set (not in persistence profile)"
   fi
   run poll_status 200 30 GET "/api/pages/$PERSIST_PAGE_ID"
-  assert_status 0 "$output" "page must be readable via API after restart"
+  assert_status 0 "$status" "page must be readable via API after restart"
 }
 
 @test "T-010 book list includes the persist book after down/up" {
@@ -45,7 +48,7 @@ setup_file() {
     skip "PERSIST_BOOK_ID not set (not in persistence profile)"
   fi
   run poll_contains 30 "\"id\":$PERSIST_BOOK_ID" GET /api/books
-  assert_status 0 "$output" "book must reappear in listing after restart"
+  assert_status 0 "$status" "book must reappear in listing after restart"
 }
 
 @test "T-010 attachment metadata survived down/up" {
@@ -67,5 +70,5 @@ setup_file() {
     skip "no ADMIN_TOKEN"
   fi
   run poll_status 200 30 GET /api/books
-  assert_status 0 "$output" "admin API token must still authenticate after restart"
+  assert_status 0 "$status" "admin API token must still authenticate after restart"
 }

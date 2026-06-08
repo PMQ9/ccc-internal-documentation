@@ -20,6 +20,7 @@ CHECKOV_IMG   := bridgecrew/checkov:3.2.532
 GITLEAKS_IMG  := ghcr.io/gitleaks/gitleaks:v8.30.1
 LYCHEE_IMG    := lycheeverse/lychee:0.15.1
 GO_IMG        := golang:1.23-alpine
+PY_IMG        := python:3.12-alpine
 
 DKR := docker run --rm -v "$(PWD)":/work -w /work
 DKR_TF := docker run --rm -v "$(PWD)/terraform":/tf -w /tf
@@ -113,7 +114,9 @@ stress-mixed: ## mixed read-write stress test (T-024)
 
 .PHONY: stress-selftest
 stress-selftest: ## offline unit tests for the stress driver's pure logic (percentile/gate/aggregation)
-	python3 tests/stress/stress_selftest.py
+	# Via the pinned python image so `make check` needs only Docker (CI's lint job,
+	# which already has python3, runs the same script directly).
+	$(DKR) $(PY_IMG) python3 tests/stress/stress_selftest.py
 
 # ---- deploy (developer action; touches a remote host, so NOT in `check`) ----
 .PHONY: deploy
@@ -127,6 +130,12 @@ apply-theme: ## re-apply the CCC brand (head + logo/favicon/color) to the runnin
 .PHONY: apply-agent-role
 apply-agent-role: ## re-apply the least-privilege "Agent author" API role to the running stack (no restart; deploys do this automatically)
 	bash deploy/local/apply-agent-role.sh
+
+# NB: contact-test / wiki-client-test run `go test` WITHOUT -race (the alpine image
+# has no C toolchain). CI installs gcc/musl-dev and runs `go test -race -count=1`,
+# so a data race can pass `make check` but fail CI. To reproduce CI locally:
+#   docker run --rm -v "$(PWD)":/work -w /work/services/contact $(GO_IMG) \
+#     sh -c 'apk add --no-cache gcc musl-dev >/dev/null && CGO_ENABLED=1 go test -race ./...'
 
 # ---- aggregates -------------------------------------------------------------
 .PHONY: check

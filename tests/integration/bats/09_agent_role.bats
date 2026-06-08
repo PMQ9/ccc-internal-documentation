@@ -7,22 +7,41 @@ load "../helpers/load"
 
 setup_file() {
   load "../helpers/load"
-  # The Agent author role is provisioned by apply-agent-role.sh during deploy.
-  # For CI we create an agent user + token via the admin API.
-  ROLES_JSON="$(api GET /api/roles)"
-  AGENT_ROLE="$(printf '%s' "$ROLES_JSON" | jq -r '.data[]? | select(.display_name=="Agent author") | .id' | head -1)"
-  if [ -z "$AGENT_ROLE" ]; then
-    echo "Agent author role not found; creating it inline for CI" >&2
-    AGENT_ROLE=$(api POST /api/roles '{"display_name":"Agent author","description":"Least-privilege headless API access","mfa_enabled":false}' | json '.id')
-    # Grant exactly the permissions the runbook specifies.
-    for perm in "access-api" "book-create-all" "book-update-all" "page-create-all" "page-update-all" "chapter-create-all" "chapter-update-all" "attachment-create-all" "image-create-all"; do
-      api POST "/api/roles/$AGENT_ROLE/permissions" "{\"name\":\"$perm\"}" >/dev/null 2>&1 || true
-    done
-  fi
+  # Provision the least-privilege "Agent author" role THROUGH the app (artisan
+  # tinker), mirroring deploy/local/apply-agent-role.sh. The BookStack REST API has
+  # NO role-permission sub-resource, so the role's permission pivot must be sync()'d
+  # in-app and the denormalized effective-permission cache regenerated — that is what
+  # actually lets the agent token author content (AGENT-001..004). firstOrCreate keeps
+  # this idempotent whether or not a prior deploy already created the role. Slugs are
+  # the same allowlist apply-agent-role.sh verified against v26.05-ls265.
+  AGENT_ROLE=$(dc exec -T bookstack php /app/www/artisan tinker 2>/dev/null <<'PHP'
+$role = \BookStack\Users\Models\Role::firstOrCreate(
+    ["display_name" => "Agent author"],
+    ["description"  => "Least-privilege headless API role (issue #27)."]
+);
+$want = [
+    "access-api",
+    "book-view-all", "book-create-all", "book-update-all",
+    "chapter-view-all", "chapter-create-all", "chapter-update-all",
+    "page-view-all", "page-create-all", "page-update-all",
+    "image-create-all", "attachment-create-all",
+];
+$ids = \BookStack\Permissions\Models\RolePermission::whereIn("name", $want)->pluck("id");
+$role->permissions()->sync($ids->all());
+echo "ROLEID:" . $role->id . ":";
+PHP
+)
+  AGENT_ROLE=$(printf '%s' "$AGENT_ROLE" | sed -nE 's/.*ROLEID:([0-9]+):.*/\1/p' | head -1)
+  [ -n "$AGENT_ROLE" ] || skip "could not provision the Agent author role via tinker"
   echo "$AGENT_ROLE" > "$BATS_FILE_TMPDIR/agent_role_id"
 
   AGENT_USER=$(api POST /api/users "{\"name\":\"CI Agent\",\"email\":\"ci-agent@example.test\",\"password\":\"AgentPass-78901\",\"roles\":[$AGENT_ROLE]}" | json '.id')
   echo "$AGENT_USER" > "$BATS_FILE_TMPDIR/agent_user_id"
+
+  # Rebuild the denormalized effective-permissions (the synced role pivot + the new
+  # user's role assignment) and bust the cache so the grant is live before the tests.
+  dc exec -T bookstack php /app/www/artisan bookstack:regenerate-permissions >/dev/null 2>&1
+  dc exec -T bookstack php /app/www/artisan cache:clear >/dev/null 2>&1
 
   TID="$(openssl rand -hex 16)"; SECRET="$(openssl rand -hex 16)"
   HASH="$(dc exec -T bookstack php -r 'echo password_hash($argv[1], PASSWORD_BCRYPT);' "$SECRET" 2>/dev/null)"
@@ -87,7 +106,10 @@ agent_api_status() { req_status "$(cat "$BATS_FILE_TMPDIR/agent_token")" "$1" "$
   bid=$(agent_api POST /api/books '{"name":"Agent Page Del"}' | json '.id')
   pid=$(agent_api POST /api/pages "{\"book_id\":$bid,\"name\":\"To Delete\",\"markdown\":\"# x\"}" | json '.id')
   run agent_api_status DELETE "/api/pages/$pid"
-  assert_status_in "403 404" "$output" "agent must be denied page delete"
+  # 403, not 404: the role has page-view-all, so the agent CAN see the page it just
+  # created — the denial is on the missing delete permission, not on visibility
+  # (mirrors AGENT-005's strict 403 for book delete).
+  assert_status 403 "$output" "agent must be denied page delete (sees the page, lacks delete)"
 }
 
 @test "AGENT-009 agent CANNOT create a user (403)" {
