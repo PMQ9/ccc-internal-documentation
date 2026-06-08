@@ -423,6 +423,27 @@ These are pass/fail CI gates rather than narrated cases:
 - **L-LINKS** markdown link check over `**/*.md` → no broken internal links. *(CFG-005)*
 - **L-ACTIONLINT** `actionlint` over `.github/workflows/` → clean (CI lints itself).
 
+## Feature-service & infra coverage (part 2 additions)
+
+The original plan (above) predates the contact service (#15/#41/#43), the headless agent API
+(#27), and the shared Go client (`services/wiki-client/`). Those features ship their own coverage,
+added here so the trace stays complete. The Go layers are **unit** tests (httptest, no network, run
+under `go test -race` in CI); the agent-role cases are **integration** bats against the live stack.
+
+| Area | Where | What it proves (added in part 2) |
+|---|---|---|
+| wiki-client transport | `services/wiki-client/resilience_test.go` | context cancel/deadline aborts the retry budget; malformed-vs-empty 2xx body handling; full retry/terminal status matrix (5xx retried, 4xx terminal); Content-Type only on writes; injected transport is used; jitter bounds |
+| contact transport | `services/contact/transport_test.go` | AgentMail non-2xx + omit-empty payload; GitHub transport-error / no-labels / non-JSON-2xx; RFC822 Date + Message-ID + header sort |
+| contact guards | `services/contact/handlers_more_test.go` | direct `themeClass`/`sameOrigin`/`verifyCSRF` tables; unreadable-body 400; global breaker not charged by invalid posts; CSRF-cookie attributes; per-kind issue labels |
+| contact config | `services/contact/env_test.go` | `env`/`envInt`/`envBool` readers; `Load` allowed-senders parsing, bad-transport rejection, trust-proxy/hops |
+| agent role (RBAC) | `tests/integration/bats/09_agent_role.bats` | **AGENT-009** no user creation (403), **AGENT-010** tampered token rejected (401/403); fixed a malformed-JSON attachment case |
+| API failure modes | `tests/integration/bats/07_negative.bats` | **N-6** update missing page → 404, **N-7** orphan `chapter_id` → clean 4xx, **N-8** malformed JSON to `/api/pages` → clean 4xx |
+| Terraform plan | `terraform/tests/plan.tftest.hcl` | **TF-018/019** bad VPN CIDR / cert ARN rejected at plan (`expect_failures`); **TF-020** subnet fan-out + internet-facing ALB + single-node ASG; **TF-021** IMDS endpoint + ALB→app HTTP/80 contract; **TF-022** RDS engine/version + backup retention; **TF-023** finite log retention; **TF-024** subnet + EFS mount-target fan-out scales with `az_count` |
+| Stress driver | `tests/stress/stress_selftest.py` | offline unit tests for `_percentile`/`_gate`/`_drive`; new optional `--max-p95-ms` PERF gate (`make stress-selftest`, in `make check` + CI) |
+
+The `T-020` id is reused by both the large-page edge case and the contact bats suite (they predate a
+shared registry); the table above is keyed on file path to disambiguate. New ids are append-only.
+
 ## Known gaps
 
 Considered and deliberately **not** automated here, each with a reason:
@@ -461,5 +482,8 @@ Blind spots that remain even with the plan fully implemented:
 
 ## Revision history
 
+- 2026-06-07 — part 2 test expansion: added the "Feature-service & infra coverage" section
+  (contact / agent API / wiki-client unit + integration cases, TF-018..024, the stress self-test);
+  no existing case rewritten (append-only).
 - 2026-06-03 — initial plan: derived working ACs from architecture/README/local-V-table/runbooks;
   4-layer strategy; coverage matrix; cases T-001..T-021, TF-001..TF-017, L-* gates.

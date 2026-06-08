@@ -176,3 +176,138 @@ func TestIssueBodyFencesUntrustedFields(t *testing.T) {
 		t.Error("issue body missing the verbatim-content note")
 	}
 }
+
+func TestMdFenceOutgrowsLongBackticks(t *testing.T) {
+	in := "evil\n`````\n@everyone\n`````" // 5 backticks
+	out := mdFence(in)
+	if !strings.HasPrefix(out, "``````") { // 6 backticks > the internal run of 5
+		t.Errorf("fence must be longer than the longest internal run: %q", out)
+	}
+	if !strings.Contains(out, in) {
+		t.Errorf("content not preserved: %q", out)
+	}
+}
+
+func TestMdFenceSingleBacktick(t *testing.T) {
+	in := "`inline code`"
+	out := mdFence(in)
+	if !strings.HasPrefix(out, "```") {
+		t.Errorf("fence must outgrow single backtick (prefix): %q", out)
+	}
+}
+
+func TestParseKindWhitespace(t *testing.T) {
+	for _, in := range []string{"  bug  ", "\tbug\t", "BUG", "Bug", " request ", " FEEDBACK "} {
+		k, ok := parseKind(in)
+		if !ok {
+			t.Errorf("parseKind(%q) should be ok", in)
+		}
+		if k == "" {
+			t.Errorf("parseKind(%q) returned empty kind", in)
+		}
+	}
+}
+
+func TestTruncateRunesEdgeCases(t *testing.T) {
+	if got := truncateRunes("", 5); got != "" {
+		t.Errorf("truncateRunes('', 5) = %q, want ''", got)
+	}
+	if got := truncateRunes("hello", 0); got != "…" {
+		t.Errorf("truncateRunes('hello', 0) = %q, want '…'", got)
+	}
+	// Multi-byte unicode: 3 bytes each.
+	in := "a☀b☀c"
+	if got := truncateRunes(in, 3); got != "a☀…" {
+		t.Errorf("truncateRunes with unicode = %q, want 'a☀…'", got)
+	}
+}
+
+func TestValidEmailIdn(t *testing.T) {
+	// IDN email — the local-part is what matters for CRLF/syntax checking.
+	good := []string{"user@xn--bcher-kva.ch", "test@müller.de", "a@b.c"}
+	bad := []string{"a@b@c.com", "a@b.com\r\n", "Name <a@b.com>"}
+	for _, s := range good {
+		if !validEmail(s) {
+			t.Errorf("validEmail(%q) = false, want true", s)
+		}
+	}
+	for _, s := range bad {
+		if validEmail(s) {
+			t.Errorf("validEmail(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestGitHubLabelMapComplete(t *testing.T) {
+	for _, k := range kindOrder {
+		if _, ok := gitHubLabel[k]; !ok {
+			t.Errorf("gitHubLabel missing entry for kind %q", k)
+		}
+	}
+}
+
+func TestKindOptionsStableOrder(t *testing.T) {
+	opts := kindOptions()
+	if len(opts) != len(kindOrder) {
+		t.Fatalf("kindOptions returned %d entries, want %d", len(opts), len(kindOrder))
+	}
+	for i, k := range kindOrder {
+		if opts[i].Value != string(k) {
+			t.Errorf("kindOptions[%d] = %q, want %q", i, opts[i].Value, string(k))
+		}
+	}
+}
+
+func TestNewSubmissionFieldMaxLengths(t *testing.T) {
+	c := &Config{AllowedDomain: "vanderbilt.edu"}
+	now := time.Now()
+	_, errs := newSubmission(formInput{
+		Kind: "bug", Name: strings.Repeat("x", maxName+1),
+		Email: "j@vanderbilt.edu", Summary: "s",
+		Details: strings.Repeat("x", maxDetails+1),
+		Page:    strings.Repeat("x", maxPage+1),
+	}, c, now)
+	expect := map[string]bool{"name": true, "details": true, "page": true}
+	for _, e := range errs {
+		if !expect[e.Field] {
+			t.Errorf("unexpected error on field %q: %s", e.Field, e.Message)
+		}
+		delete(expect, e.Field)
+	}
+	for field := range expect {
+		t.Errorf("expected error on field %q but got none", field)
+	}
+}
+
+func TestSubjectTruncation(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	s := &Submission{Kind: kindBug, Summary: long}
+	subj := s.subject("CCC Wiki")
+	if len([]rune(subj)) > 145 { // max: prefix "[CCC Wiki] Bug report - " (~23) + 120 + "…"
+		t.Errorf("subject too long: %d runes", len([]rune(subj)))
+	}
+	if !strings.Contains(subj, "…") {
+		t.Error("expected truncation ellipsis in long subject")
+	}
+}
+
+func TestIssueBodyEmptyDetails(t *testing.T) {
+	s := &Submission{Kind: kindFeedback, Name: "J", Email: "j@v.edu", Summary: "s",
+		At: time.Date(2026, 6, 6, 14, 30, 0, 0, time.UTC)}
+	b := s.issueBody("CCC Wiki")
+	if !strings.Contains(b, "_(nothing provided)_") {
+		t.Error("issue body should include a placeholder for empty details")
+	}
+	if strings.Contains(b, "_(none provided)_") {
+		t.Error("issue body should not use the email-view placeholder for empty details")
+	}
+}
+
+func TestEmailViewEmptyDetails(t *testing.T) {
+	s := &Submission{Kind: kindOther, Name: "J", Email: "j@v.edu", Summary: "s",
+		At: time.Date(2026, 6, 6, 14, 30, 0, 0, time.UTC)}
+	v := s.emailView("CCC Wiki")
+	if v.Details != "(none provided)" {
+		t.Errorf("emailView.Details = %q, want '(none provided)'", v.Details)
+	}
+}

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidate(t *testing.T) {
 	// A baseline valid config; cases below flip one field at a time to invalid.
@@ -88,5 +91,91 @@ func TestRandomToken(t *testing.T) {
 	b, _ := randomToken(16)
 	if a == b {
 		t.Error("two tokens should differ")
+	}
+}
+
+func TestSenderRejectMessageAllowlist(t *testing.T) {
+	c := &Config{AllowedSenders: []string{"a@vanderbilt.edu"}}
+	msg := c.senderRejectMessage()
+	if !strings.Contains(msg, "approved senders") {
+		t.Errorf("reject message should mention approved senders: %q", msg)
+	}
+}
+
+func TestSenderRejectMessageDomain(t *testing.T) {
+	c := &Config{AllowedDomain: "vanderbilt.edu"}
+	msg := c.senderRejectMessage()
+	if !strings.Contains(msg, "vanderbilt.edu") {
+		t.Errorf("reject message should mention the allowed domain: %q", msg)
+	}
+}
+
+func TestValidateAgentMailTransport(t *testing.T) {
+	c := &Config{Transport: "agentmail", SMTPEncryption: "starttls",
+		RateLimitPerHour: 1, GlobalRateLimitPerHour: 1, GitHubDailyCap: 1, TrustedProxyHops: 1}
+	if err := c.validate(); err != nil {
+		t.Errorf("agentmail transport should be valid: %v", err)
+	}
+}
+
+func TestMailConfiguredAgentMail(t *testing.T) {
+	// AgentMail requires key + inbox but NOT a from address.
+	c := &Config{Transport: "agentmail", Recipient: "a@b.org",
+		AgentMailAPIKey: "am_x", AgentMailInbox: "ccc-3278@agentmail.to"}
+	if !c.mailConfigured() {
+		t.Error("agentmail with key+inbox should be configured")
+	}
+	c.AgentMailInbox = ""
+	if c.mailConfigured() {
+		t.Error("agentmail without inbox should NOT be configured")
+	}
+}
+
+func TestMailConfiguredGraphDefaults(t *testing.T) {
+	// Graph uses FromAddress when GraphSenderUPN is empty.
+	c := &Config{Transport: "graph", Recipient: "a@b.org", FromAddress: "c@d.org",
+		GraphTenantID: "t", GraphClientID: "i", GraphClientSecret: "s"}
+	if !c.mailConfigured() {
+		t.Error("graph with full creds + from should be configured")
+	}
+	// Without FromAddress, graph should not be configured.
+	c.FromAddress = ""
+	if c.mailConfigured() {
+		t.Error("graph without from address should NOT be configured")
+	}
+}
+
+func TestSenderAllowedCaseInsensitive(t *testing.T) {
+	c := &Config{AllowedSenders: []string{"A@Vanderbilt.EDU"}}
+	if !c.senderAllowed("a@vanderbilt.edu") {
+		t.Error("allowlist should be case-insensitive")
+	}
+	if !c.senderAllowed("A@VANDERBILT.EDU") {
+		t.Error("allowlist should handle different casing")
+	}
+}
+
+func TestSenderAllowedEmptyAllowlist(t *testing.T) {
+	c := &Config{AllowedSenders: []string{}}
+	if !c.senderAllowed("a@vanderbilt.edu") {
+		t.Error("empty allowlist with no domain should allow any")
+	}
+}
+
+func TestLoadDefaults(t *testing.T) {
+	// With no env set, Load should return defaults (and fail validation because
+	// some are required). We just test it doesn't panic and returns something.
+	t.Setenv("CONTACT_RECIPIENT", "test@example.org")
+	t.Setenv("MAIL_FROM_ADDRESS", "from@example.org")
+	t.Setenv("MAIL_HOST", "smtp.example.org")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with minimal valid env should succeed: %v", err)
+	}
+	if cfg.RateLimitPerHour != 20 {
+		t.Errorf("default RateLimitPerHour = %d, want 20", cfg.RateLimitPerHour)
+	}
+	if cfg.Transport != "smtp" {
+		t.Errorf("default Transport = %q, want smtp", cfg.Transport)
 	}
 }

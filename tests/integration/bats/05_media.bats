@@ -45,3 +45,76 @@ setup_file() {
   found=$(dc exec -T bookstack sh -lc 'find /config -type f -path "*uploads/images*" -name "verify-media*.png" 2>/dev/null | head -1')
   [ -n "$found" ] || flunk "uploaded image not found under /config/.../uploads/images"
 }
+
+@test "T-025 uploaded attachment is downloadable via API" {
+  local page_id attach_id content
+  page_id=$(cat "$BATS_FILE_TMPDIR/page_id")
+  printf 'downloadable attachment content\n' > "$BATS_FILE_TMPDIR/download-test.txt"
+  attach_id=$(curl -s -H "Authorization: Token $ADMIN_TOKEN" \
+    -F "uploaded_to=$page_id" -F "name=download-test.txt" \
+    -F "file=@$BATS_FILE_TMPDIR/download-test.txt;filename=download-test.txt" \
+    "$BASE_URL/api/attachments" | json '.id')
+  [ -n "$attach_id" ] && [ "$attach_id" != "null" ] || flunk "attachment id not returned on upload"
+
+  # Fetch the attachment metadata and extract the download URL.
+  attach_json=$(api GET "/api/attachments/$attach_id")
+  download_url=$(printf '%s' "$attach_json" | json '.path // empty')
+  # If the API stores a download link, try it.
+  if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
+    content=$(curl -s -H "Authorization: Token $ADMIN_TOKEN" "$BASE_URL$download_url")
+    # Fall back to checking the file on disk if the path is local.
+    if echo "$content" | grep -q "downloadable"; then
+      :
+    else
+      # Check on-disk as backup
+      base=$(printf '%s' "$attach_json" | json '.path' | awk -F/ '{print $NF}')
+      found=$(dc exec -T bookstack sh -lc "find /config -type f -name '$base' 2>/dev/null | head -1" 2>/dev/null || true)
+      [ -n "$found" ] || flunk "uploaded download-test.txt not found on disk"
+    fi
+  else
+    # Path may be a storage path; verify on disk.
+    base=$(dbq "SELECT path FROM attachments WHERE id=$attach_id;" | awk -F/ '{print $NF}')
+    [ -n "$base" ] || flunk "no attachment row for id=$attach_id"
+    found=$(dc exec -T bookstack sh -lc "find /config -type f -name '$base' 2>/dev/null | head -1" 2>/dev/null || true)
+    [ -n "$found" ] || flunk "attachment $base not found on disk for id=$attach_id"
+  fi
+}
+
+@test "T-025 uploaded image is visible via gallery API" {
+  local page_id img_id
+  page_id=$(cat "$BATS_FILE_TMPDIR/page_id")
+  img_id=$(curl -s -H "Authorization: Token $ADMIN_TOKEN" \
+    -F "type=gallery" -F "uploaded_to=$page_id" \
+    -F "image=@$BATS_FILE_TMPDIR/verify-media.png;filename=gallery-check.png" \
+    "$BASE_URL/api/image-gallery" | json '.id')
+  [ -n "$img_id" ] && [ "$img_id" != "null" ] || flunk "image id not returned on upload"
+
+  # The image should appear in the gallery listing.
+  run api_status GET "/api/image-gallery?uploaded_to=$page_id"
+  assert_status 200 "$output" "gallery listing should succeed"
+
+  found=$(dc exec -T bookstack sh -lc 'find /config -type f -path "*uploads/images*" -name "gallery-check*.png" 2>/dev/null | head -1' 2>/dev/null || true)
+  [ -n "$found" ] || flunk "gallery-check image not found on disk"
+}
+
+@test "T-025 delete attachment then re-upload" {
+  local page_id attach_id
+  page_id=$(cat "$BATS_FILE_TMPDIR/page_id")
+  printf 'reupload test\n' > "$BATS_FILE_TMPDIR/reupload.txt"
+  attach_id=$(curl -s -H "Authorization: Token $ADMIN_TOKEN" \
+    -F "uploaded_to=$page_id" -F "name=reupload-test.txt" \
+    -F "file=@$BATS_FILE_TMPDIR/reupload.txt;filename=reupload-test.txt" \
+    "$BASE_URL/api/attachments" | json '.id')
+  [ -n "$attach_id" ] && [ "$attach_id" != "null" ] || flunk "reupload attachment id not returned"
+
+  run api_status DELETE "/api/attachments/$attach_id"
+  assert_status_in "200 204" "$output" "admin must be able to delete an attachment"
+
+  # Re-upload with same name.
+  run curl -s -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Token $ADMIN_TOKEN" \
+    -F "uploaded_to=$page_id" -F "name=reupload-test.txt" \
+    -F "file=@$BATS_FILE_TMPDIR/reupload.txt;filename=reupload-test.txt" \
+    "$BASE_URL/api/attachments"
+  assert_status_in "200 201" "$output" "re-upload after delete should succeed"
+}

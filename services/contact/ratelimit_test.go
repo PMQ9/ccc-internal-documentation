@@ -94,3 +94,93 @@ func TestRateLimiterConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestEvictBatchTargetZero(t *testing.T) {
+	rl := newRateLimiter(1, time.Hour)
+	for i := 0; i < 5; i++ {
+		rl.hits["key-"+strconv.Itoa(i)] = []time.Time{rlBase.Add(time.Duration(i) * time.Minute)}
+	}
+	rl.evictBatch(0)
+	if len(rl.hits) != 0 {
+		t.Errorf("evictBatch(0) left %d keys, want 0", len(rl.hits))
+	}
+}
+
+func TestEvictBatchTargetNegative(t *testing.T) {
+	rl := newRateLimiter(1, time.Hour)
+	for i := 0; i < 3; i++ {
+		rl.hits["key-"+strconv.Itoa(i)] = []time.Time{rlBase}
+	}
+	rl.evictBatch(-5)
+	if len(rl.hits) != 0 {
+		t.Errorf("evictBatch(-5) left %d keys, want 0", len(rl.hits))
+	}
+}
+
+func TestEvictBatchBelowTargetNoOp(t *testing.T) {
+	rl := newRateLimiter(1, time.Hour)
+	for i := 0; i < 3; i++ {
+		rl.hits["key-"+strconv.Itoa(i)] = []time.Time{rlBase}
+	}
+	rl.evictBatch(10)
+	if len(rl.hits) != 3 {
+		t.Errorf("evictBatch(10) changed size to %d, want 3 (no-op when below target)", len(rl.hits))
+	}
+}
+
+func TestRateLimiterKeyNotFound(t *testing.T) {
+	rl := newRateLimiter(5, time.Hour)
+	if !rl.allow("new-key", rlBase) {
+		t.Error("first hit for a brand-new key should be allowed")
+	}
+}
+
+func TestRateLimiterConcurrentBurst(t *testing.T) {
+	rl := newRateLimiter(100, time.Hour)
+	var wg sync.WaitGroup
+	for g := 0; g < 10; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 100; i++ {
+				rl.allow("burst", rlBase)
+			}
+		}()
+	}
+	wg.Wait()
+	// At most 100 should have been allowed.
+	if len(rl.hits["burst"]) > 100 {
+		t.Errorf("burst key has %d hits, want <= 100", len(rl.hits["burst"]))
+	}
+}
+
+func TestRateLimiterSweepDoesNotDeleteActiveKeys(t *testing.T) {
+	rl := newRateLimiter(5, time.Hour)
+	rl.allow("active", rlBase)
+	rl.allow("active", rlBase.Add(30*time.Minute))
+	rl.allow("active", rlBase.Add(55*time.Minute))
+	rl.allow("new", rlBase.Add(90*time.Minute)) // triggers sweep
+	if _, ok := rl.hits["active"]; !ok {
+		t.Error("active key should survive a sweep")
+	}
+	if len(rl.hits["active"]) != 3 {
+		t.Errorf("active key lost %d hits, want 3", len(rl.hits["active"]))
+	}
+}
+
+func TestRateLimiterWindowReset(t *testing.T) {
+	rl := newRateLimiter(2, time.Hour)
+	if !rl.allow("k", rlBase) {
+		t.Fatal("hit 1 should be allowed")
+	}
+	if !rl.allow("k", rlBase.Add(30*time.Minute)) {
+		t.Fatal("hit 2 should be allowed")
+	}
+	if rl.allow("k", rlBase.Add(30*time.Minute)) {
+		t.Fatal("hit 3 should be denied")
+	}
+	// After the window elapses, both hits drop and a new one should be allowed.
+	if !rl.allow("k", rlBase.Add(61*time.Minute)) {
+		t.Fatal("hit 4 after window should be allowed")
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -257,5 +258,342 @@ func TestLoadRejectsBadEnvValue(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "WIKI_HTTP_TIMEOUT") {
 		t.Errorf("error should name the offending variable: %v", err)
+	}
+}
+
+func TestListBooksEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	books, err := c.ListBooks(context.Background())
+	if err != nil {
+		t.Fatalf("ListBooks: %v", err)
+	}
+	if len(books) != 0 {
+		t.Errorf("got %d books, want 0", len(books))
+	}
+}
+
+func TestListBooksMultiple(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":1,"name":"A"},{"id":2,"name":"B"}],"total":2}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	books, err := c.ListBooks(context.Background())
+	if err != nil {
+		t.Fatalf("ListBooks: %v", err)
+	}
+	if len(books) != 2 {
+		t.Fatalf("got %d books, want 2", len(books))
+	}
+	if books[0].Name != "A" || books[1].Name != "B" {
+		t.Errorf("book names = %q %q, want A B", books[0].Name, books[1].Name)
+	}
+}
+
+func TestUpdateBook(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":1,"name":"Updated"}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	b, err := c.UpdateBook(context.Background(), 1, Book{Name: "Updated"})
+	if err != nil {
+		t.Fatalf("UpdateBook: %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %s, want PUT", gotMethod)
+	}
+	if gotPath != "/api/books/1" {
+		t.Errorf("path = %s, want /api/books/1", gotPath)
+	}
+	if !strings.Contains(string(gotBody), `"name":"Updated"`) {
+		t.Errorf("body missing Updated: %s", gotBody)
+	}
+	if b.Name != "Updated" {
+		t.Errorf("returned name = %q, want Updated", b.Name)
+	}
+}
+
+func TestUpdatePage(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":1,"name":"Updated Page"}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	p, err := c.UpdatePage(context.Background(), 1, Page{Name: "Updated Page", Markdown: "# v2"})
+	if err != nil {
+		t.Fatalf("UpdatePage: %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %s, want PUT", gotMethod)
+	}
+	if gotPath != "/api/pages/1" {
+		t.Errorf("path = %s, want /api/pages/1", gotPath)
+	}
+	if p.Name != "Updated Page" {
+		t.Errorf("returned name = %q, want Updated Page", p.Name)
+	}
+}
+
+func TestCreateBook(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":42,"name":"New Book","slug":"new-book"}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	b, err := c.CreateBook(context.Background(), Book{Name: "New Book"})
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+	if b.ID != 42 || b.Slug != "new-book" {
+		t.Errorf("returned book = %+v, want id=42 slug=new-book", b)
+	}
+}
+
+func TestRetryBudgetExhausted(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":{"code":503,"message":"always down"}}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 2) // 2 retries = 3 total attempts
+	_, err := c.GetBook(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected an error after exhausting retries")
+	}
+	if calls.Load() != 3 {
+		t.Errorf("calls = %d, want 3 (initial + 2 retries exhausted)", calls.Load())
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("final error is not *APIError: %T", err)
+	}
+	if !apiErr.Retryable() {
+		t.Error("the final exhausted-retry error should still be retryable (5xx)")
+	}
+}
+
+func TestTransportErrorNotRetriedWhenNoRetries(t *testing.T) {
+	c := fastClient(t, "http://127.0.0.1:1", 0) // unreachable, 0 retries
+	_, err := c.GetBook(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected a transport error")
+	}
+	if strings.Contains(err.Error(), testToken) {
+		t.Errorf("transport error must not leak the token: %q", err.Error())
+	}
+}
+
+func TestTransportErrorWithRetries(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		// Close the connection without responding to trigger a transport error.
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("server does not support hijack")
+		}
+		conn, _, _ := hj.Hijack()
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 2)
+	_, err := c.GetBook(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected a transport error after retries")
+	}
+	if calls.Load() != 3 {
+		t.Errorf("calls = %d, want 3 (initial + 2 retries)", calls.Load())
+	}
+}
+
+func TestConfigValidateEmptyBaseURL(t *testing.T) {
+	err := (Config{Token: "a:b"}).validate()
+	if err == nil {
+		t.Fatal("expected error for empty BaseURL")
+	}
+}
+
+func TestConfigValidateNoScheme(t *testing.T) {
+	err := (Config{BaseURL: "localhost:8080", Token: "a:b"}).validate()
+	if err == nil {
+		t.Fatal("expected error for missing scheme")
+	}
+}
+
+func TestConfigValidateEmptyToken(t *testing.T) {
+	err := (Config{BaseURL: "http://localhost", Token: ""}).validate()
+	if err == nil {
+		t.Fatal("expected error for empty token")
+	}
+}
+
+func TestConfigValidateNoColonInToken(t *testing.T) {
+	err := (Config{BaseURL: "http://localhost", Token: "justid"}).validate()
+	if err == nil {
+		t.Fatal("expected error for token without colon")
+	}
+}
+
+func TestConfigValidateEmptyIdInToken(t *testing.T) {
+	err := (Config{BaseURL: "http://localhost", Token: ":secret"}).validate()
+	if err == nil {
+		t.Fatal("expected error for token with empty id")
+	}
+}
+
+func TestConfigValidateNegativeRetries(t *testing.T) {
+	err := (Config{BaseURL: "http://localhost", Token: "a:b", MaxRetries: -1}).validate()
+	if err == nil {
+		t.Fatal("expected error for negative MaxRetries")
+	}
+}
+
+func TestWithHTTPClientNil(t *testing.T) {
+	c, err := New(Config{BaseURL: "http://x", Token: "a:b", MaxRetries: 0}, WithHTTPClient(nil))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if c.httpc == nil {
+		t.Error("WithHTTPClient(nil) must not replace the default client")
+	}
+}
+
+func TestGetBookNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":404,"message":"Book not found"}}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	_, err := c.GetBook(context.Background(), 999)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error is not *APIError: %v", err)
+	}
+	if apiErr.StatusCode != 404 {
+		t.Errorf("status = %d, want 404", apiErr.StatusCode)
+	}
+}
+
+func TestGetPageNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":404,"message":"Page not found"}}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	_, err := c.GetPage(context.Background(), 999)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error is not *APIError: %v", err)
+	}
+	if apiErr.Message != "Page not found" {
+		t.Errorf("message = %q, want 'Page not found'", apiErr.Message)
+	}
+}
+
+func TestListPages(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":1,"name":"Page A"},{"id":2,"name":"Page B"}],"total":2}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	pages, err := c.ListPages(context.Background())
+	if err != nil {
+		t.Fatalf("ListPages: %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("got %d pages, want 2", len(pages))
+	}
+}
+
+func TestApiErrorFromEmptyBody(t *testing.T) {
+	e := apiErrorFrom(503, []byte{}, "GET", "/api/books")
+	if e.StatusCode != 503 || e.Message != "Service Unavailable" {
+		t.Errorf("apiErrorFrom empty body = %+v, want 503 'Service Unavailable'", e)
+	}
+}
+
+func TestApiErrorFromNonJSONBody(t *testing.T) {
+	e := apiErrorFrom(502, []byte(`<html>bad gateway</html>`), "POST", "/api/pages")
+	if e.StatusCode != 502 || e.Message != "Bad Gateway" {
+		t.Errorf("apiErrorFrom non-JSON = %+v, want 502 'Bad Gateway'", e)
+	}
+}
+
+func TestConcurrentClientSafe(t *testing.T) {
+	var mu sync.Mutex
+	var callCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"id":1,"name":"ok"}`))
+	}))
+	defer srv.Close()
+
+	c := fastClient(t, srv.URL, 0)
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := c.GetBook(context.Background(), 1)
+			if err != nil {
+				t.Errorf("concurrent GetBook: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if callCount != 20 {
+		t.Errorf("call count = %d, want 20", callCount)
+	}
+}
+
+func TestNewNormalizesBaseURL(t *testing.T) {
+	// Add the missing sync import if needed.
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
+	}))
+	defer srv.Close()
+
+	for _, base := range []string{srv.URL, srv.URL + "/"} {
+		c, err := New(Config{BaseURL: base, Token: testToken, MaxRetries: 0})
+		if err != nil {
+			t.Fatalf("New(%q): %v", base, err)
+		}
+		_, _ = c.ListBooks(context.Background())
+		if gotPath != "/api/books" {
+			t.Errorf("base=%q path=%q, want /api/books", base, gotPath)
+		}
 	}
 }
