@@ -26,7 +26,7 @@ jobs:
       run:
         working-directory: terraform
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: ${{ env.TF_VERSION }}
@@ -37,7 +37,7 @@ jobs:
         run: terraform init -backend=false -input=false
       - name: terraform validate
         run: terraform validate
-      - uses: terraform-linters/setup-tflint@b480b8fcdaa6f2c577f8e4fa799e89e756bb7c93 # v6.2.2
+      - uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a # v6.3.0
         with:
           tflint_version: v0.63.1
       - name: tflint
@@ -55,7 +55,7 @@ jobs:
     name: iac security · trivy · checkov
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: trivy config scan (terraform)
         run: |
           docker run --rm -v "$PWD":/work -w /work aquasec/trivy:0.71.0 \
@@ -69,7 +69,7 @@ jobs:
     name: lint · shell · compose · actions · pins
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: render user-data template for shellcheck
         run: ./tests/lib/render_user_data.sh > "$RUNNER_TEMP/user_data.rendered.sh"
       - name: shellcheck (incl. rendered user-data)
@@ -103,7 +103,7 @@ jobs:
     name: secrets · gitleaks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: gitleaks (tree scan)
         run: |
           docker run --rm -v "$PWD":/work ghcr.io/gitleaks/gitleaks:v8.30.1 \
@@ -113,7 +113,7 @@ jobs:
     name: docs · link check (offline)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: lychee (local file links only)
         run: |
           docker run --rm -v "$PWD":/work -w /work lycheeverse/lychee:0.15.1 \
@@ -123,7 +123,7 @@ jobs:
     name: wiki-client · gofmt + vet + test (race)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: wiki-client core checks (gofmt, vet, race tests)
         run: |
           docker run --rm -v "$PWD":/work -w /work/services/wiki-client golang:1.23-alpine sh -c '
@@ -136,7 +136,7 @@ jobs:
     name: wiki-cli · gofmt + vet + test (race)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: ccc-wiki CLI checks (gofmt, vet, race tests)
         run: |
           docker run --rm -v "$PWD":/work -w /work/services/wiki-cli golang:1.23-alpine sh -c '
@@ -149,7 +149,7 @@ jobs:
     name: contact · gofmt + vet + test (race)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: contact service checks (gofmt, vet, race tests)
         run: |
           docker run --rm -v "$PWD":/work -w /work/services/contact golang:1.23-alpine sh -c '
@@ -165,6 +165,6 @@ jobs:
     # + agent-role/health-DB-down/stress leave little headroom at 25 on a slow runner.
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: run integration suite
         run: tests/integration/run.sh --profile pr
